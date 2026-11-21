@@ -1,0 +1,242 @@
+# Knockd Backend
+
+The backend serves both the mobile app and the web app. This doc covers the stack, architecture, data model, data processing and deployment. The REST endpoints and socket events are in [API.md](API.md). Product scope is in the [README](../README.md).
+
+Owner: Tristan
+
+---
+
+## Architecture
+
+```
+Mobile app  <--Socket.io + REST-->  Vultr VM (Coolify)               -->  Tiger Cloud
+Web app     <--REST------------->   ├─ api: Express + Socket.io           (Postgres + TimescaleDB + PostGIS)
+                                    └─ osrm: map matching (London extract)
+```
+
+- **One server** handles REST (teams, maps, plans, uploads, history) and Socket.io (everything live in a session)
+- **Tiger Cloud** is the only database. It's managed, so it doesn't live on the VM
+- **OSRM** runs next to the API on the same VM and is only called by the server
+
+### Principles
+- **All data goes through the API.** Phones and the web app never talk to the database directly, so both frontends share one API
+- **Save session data from day one.** The web app's history starts with the first real session, even if the web app is built later
+- **The client generates IDs** for anything created offline (pings, leads, planning changes), so the server can deduplicate on retry
+- **One repo, shared types.** The API contract lives in `packages/shared` as Zod schemas used by the server and both frontends
+
+---
+
+## Stack
+
+| Piece | Choice | Notes |
+|---|---|---|
+| Language | TypeScript, Node 22 LTS | |
+| HTTP | Express 5 | |
+| Realtime | Socket.io 4 | One room per session code |
+| Validation | Zod | Schemas in `packages/shared`, used for both REST bodies and socket payloads |
+| Database | Tiger Cloud (Postgres + TimescaleDB + PostGIS) | **Check that PostGIS can be enabled on the free tier first** |
+| ORM | Drizzle ORM (postgres.js driver) | Typed queries for normal tables; Drizzle's `sql` template for PostGIS and Timescale queries |
+| Migrations | Drizzle Kit | Generated migrations for normal tables; custom SQL migrations (`drizzle-kit generate --custom`) for hypertables, policies, continuous aggregates and PostGIS |
+| Auth | Auth0 + `express-oauth2-jwt-bearer` | Verifies account tokens on REST and on socket connect |
+| Guest auth | `jose` | Server-signed guest token issued when someone joins with a code |
+| Background jobs | pg-boss | Job queue stored in Postgres. Runs end-of-session processing and scheduled cleanup. No Redis |
+| Map matching | OSRM (`ghcr.io/project-osrm/osrm-backend`), foot profile | London extract only, to keep RAM low |
+| Logging | pino | |
+| Dev / tests | `tsx watch`, Vitest | |
+| Package manager | pnpm workspaces | |
+
+---
+
+## Repo layout
+
+```
+apps/
+  server/
+    src/
+      http/        REST routes and middleware
+      realtime/    Socket.io handlers and in-memory session state
+      db/          Drizzle schema, client, queries
+      jobs/        pg-boss jobs (session processing, cleanup)
+      geo/         map matching, worked/passed classification, block stats
+      sim/         simulated crew
+    drizzle/       migrations (generated + custom SQL)
+    scripts/       one-time imports (roads, houses, census) and demo seeding
+  mobile/          Jasmine
+  web/             later
+packages/
+  shared/          Zod schemas and types for REST and socket events
+docker-compose.yml
+```
+
+---
+
+## Data model
+
+A first draft. Names and columns will change as the API is designed.
+
+### Accounts and teams
+| Table | Key columns |
+|---|---|
+| `users` | id, auth0_sub, display_name |
+| `teams` | id, name, created_by |
+| `team_members` | team_id, user_id, role (`owner` / `admin` / `member`) |
+| `team_invites` | token, team_id, created_by, expires_at |
+| `maps` | id, team_id, name, boundary (polygon, null = no boundary), filters (jsonb, e.g. date range) |
+| `plans` | id, team_id, map_id (nullable), name, assignments (jsonb: block IDs per person or pair), used_in_session_id (nullable) |
+
+### Live sessions
+| Table | Key columns |
+|---|---|
+| `sessions` | id, join_code, created_by (nullable for guests), status (`live` / `ended` / `processed`), started_at, ended_at, loaded_map_id, loaded_layers |
+| `session_cells` | session_id, cell_id. The session area grows as cells are loaded (~1 km grid, see [API.md](API.md#map-cells)) |
+| `session_members` | id, session_id, user_id (nullable for guests), display_name, colour, joined_at |
+| `pings` | **hypertable**: time, session_id, member_id, location (point), accuracy, client_id (unique) |
+| `leads` | id (client UUID), session_id, member_id, house_id, grade (`A` / `B` / `C`), created_at, deleted_at (undo) |
+| `pins` | id, session_id, member_id, location, created_at |
+| `chat_messages` | id (client UUID), session_id, member_id, body, created_at |
+| `session_plans` | session_id, state (`draft` / `applied`), assignments, drawings (jsonb), updated_at |
+
+### Processed session results
+Written by the end-of-session job. Kept forever for uploaded sessions.
+
+| Table | Key columns |
+|---|---|
+| `session_paths` | session_id, member_id, path (matched linestring) |
+| `session_street_coverage` | session_id, member_id, street_id, duration_s, classification (`worked` / `passed`), first_seen, last_seen |
+| `session_block_stats` | session_id, block_id, houses_worked, leads_a, leads_b, leads_c |
+| `team_sessions` | team_id, session_id, uploaded_by, uploaded_at. **Primary key (team_id, session_id)** to stop duplicate uploads |
+
+### Map reference data
+Imported once per region by scripts.
+
+| Table | Key columns |
+|---|---|
+| `streets` | id, name, geom (linestring), length_m |
+| `blocks` | id, geom (polygon), house_count |
+| `houses` | id, geom (polygon), centroid, block_id, street_id (nearest street) |
+| `census_areas` | dguid, geom (polygon), median_household_income |
+
+---
+
+## Tiger Data features
+
+| Feature | Used for |
+|---|---|
+| Hypertable | `pings`, partitioned by time |
+| Retention policy | Drop raw pings older than 7 days. This is the grace period, handled by the database with no code |
+| Compression policy | Compress pings older than 1 day |
+| Continuous aggregates | Knock rate per crew (houses worked per hour, used as the planning default), leads over time per team, coverage per week |
+| PostGIS | Streets, blocks, houses, census areas, map matching results, `ST_AsGeoJSON` for map queries, `ST_Intersects` with a map's boundary |
+
+---
+
+## Live sessions
+
+### In-memory state
+- The server keeps each live session's state in memory: members, latest positions, online status and the current plan draft
+- Everything that matters is also written to the database (pings, leads, pins, chat, plan), so a server restart only loses the in-memory snapshot, which is rebuilt from the database
+- Single server only. If there's ever more than one, add the Socket.io Redis adapter
+
+### Pings
+- Phones send pings in batches every 15–30 seconds
+- The server inserts each batch in one query (`ON CONFLICT (client_id) DO NOTHING`) and broadcasts the latest positions to the room
+- Offline batches arrive late with their original timestamps. Processing uses the ping timestamps, not the arrival time
+
+### Reconnecting
+- When a phone reconnects, it rejoins the room and sends anything in its offline queue
+- The server replies with a snapshot: members, latest positions, leads, pins, the plan, and chat since the last message the phone saw
+
+### Ending a session
+- Ends when the creator ends it, or automatically at the end of the day (e.g. midnight local time, or 12 hours after the start)
+- On end: status → `ended`, the room is told, and a `process-session` job is queued
+
+---
+
+## End-of-session processing
+
+The `process-session` pg-boss job:
+
+1. **Map match:** send each member's pings to OSRM `/match/v1/foot`, split into chunks wherever there are gaps in the GPS data. Save the matched paths to `session_paths`
+2. **Drop driving:** ignore stretches faster than about 8 km/h
+3. **Classify streets:** for each member and street, add up the time spent. Minutes per 100m above a threshold = `worked`, otherwise `passed`. The thresholds live in config so they can be tuned after real test walks
+4. **Block stats:** houses worked = houses whose nearest street was `worked` in this session. Count leads A/B/C per block
+5. **Mark processed:** status → `processed`. The session is ready to upload
+
+### Uploading
+- Upload = insert into `team_sessions`. The primary key makes duplicate uploads a no-op
+- Only team members can upload to their team
+
+### Cleanup (scheduled pg-boss job)
+- Daily: delete sessions older than 7 days that aren't in `team_sessions`, along with their processed results, leads, pins and chat
+- Raw pings are handled separately by the retention policy
+
+---
+
+## Map and analytics queries
+
+- **Maps are views.** A map query = the team's uploaded sessions ∩ the map's boundary ∩ the map's filters ∩ the viewport
+- **Paths:** returned with duration and age, so the frontend can calculate visibility (duration × age, with the team's fade time)
+- **Lead rate per block** = (A + B) ÷ houses worked, nudged toward the team average for small samples: `(AB + k × team_rate) ÷ (houses_worked + k)`, with k ≈ 15. Blocks below the minimum number of houses worked are returned as "not enough data"
+- **Where next?:** rank blocks by `census median income × days since last worked`, both normalised
+- **Loading team data into a session:** the same queries clipped to the session area, sent to the phone at session start
+
+---
+
+## Map data imports
+
+One-time scripts in `apps/server/scripts/`, run per region (London first):
+
+| Data | Source | Steps |
+|---|---|---|
+| Roads | OpenStreetMap Ontario extract (Geofabrik) | Clip to London with `osmium`, import with `osm2pgsql`, keep walkable/residential roads → `streets` |
+| Blocks | Generated from roads | `ST_Polygonize` on the road network, drop very large or very small polygons → `blocks` |
+| Houses | Microsoft Canadian building footprints | Clip to London, import with `ogr2ogr`, drop non-residential sizes, assign to block and nearest street → `houses` |
+| Census | Statistics Canada 2021 dissemination areas + census profile | Join boundaries with median household income → `census_areas` |
+| OSRM | Same London `.osm.pbf` | `osrm-extract` (foot profile) → `osrm-partition` → `osrm-customize` |
+
+---
+
+## Auth
+
+- **Accounts:** Auth0. REST requests send an access token, checked by `express-oauth2-jwt-bearer`. The first request from a new user creates their `users` row
+- **Guests:** joining with a code returns a guest token signed by the server, tied to one session and member, and valid until the session ends
+- **Sockets:** the handshake sends either an Auth0 token or a guest token. The server checks it before joining the room
+- **Team permissions:** checked per request against `team_members.role`
+
+---
+
+## Simulated crew
+
+- A server module (`src/sim`) that adds fake members to a real session
+- Each bot follows a scripted route (GeoJSON, walking pace with stops at houses) and sends pings exactly like a phone, so the server handles them as normal traffic
+- Bots occasionally mark leads, so lead alerts and the leaderboard have something to show
+- Started from a dev-only endpoint or script
+- **Demo seeding script:** generates a few weeks of past sessions for a team, runs them through the same processing job, and uploads them so the web map has history
+
+---
+
+## Deployment
+
+- **Vultr VM** with the Coolify Marketplace image
+- Coolify deploys `docker-compose.yml` from GitHub on every push to `main`. Two services:
+  - `api`: the Express + Socket.io server
+  - `osrm`: `osrm-routed` serving the London data
+- Coolify handles HTTPS once the domain points at the VM
+- **Tiger Cloud** is managed separately. The connection string goes in an environment variable
+
+### Environment variables
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Tiger Cloud connection string |
+| `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | Auth0 token checks |
+| `GUEST_TOKEN_SECRET` | Signing guest tokens |
+| `OSRM_URL` | Internal URL of the OSRM service |
+| `GEMINI_API_KEY` | Only if the "ask your data" add-on is built |
+
+---
+
+## To check early
+- PostGIS is available on the Tiger Cloud free tier
+- How much RAM OSRM needs for the London extract, so you can pick the VM size
+- That `ST_Polygonize` on London's roads gives sensible blocks (cul-de-sacs and parks will need cleanup)
+- Worked/passed thresholds, using a real test walk
