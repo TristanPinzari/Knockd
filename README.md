@@ -27,7 +27,7 @@ It has two parts:
 4. The crew plans together in **planning mode**: assign blocks to people or pairs, then apply the plan to the shared map
 5. As people move, they leave a colored trail behind them
 6. Streets get "painted" as they're worked — the map fills in visually as the crew works
-7. Sales are marked with a long-press on the house; everything else is assumed no sale
+7. Leads are marked with a long-press on the house and graded A, B or C; everything else is assumed no lead
 8. Session ends when the crew is done for the day, with end-of-day stats
 9. Anyone in the session who's on a team can upload it to that team, where it shows up on the team's maps in the web app
 
@@ -70,34 +70,42 @@ Replaces screenshot-and-draw. A shared planning screen inside the session:
 - The algorithm grows one group of connected blocks per person or pair outward from different starting blocks, balanced by house count against the time budget. Different starting blocks give the different options
 - An optional server API can add heavier work later, like real walking routes through each chunk (OSRM)
 
-### Sales
-- Every house is assumed no sale. No need to keep the app open to log each door
-- **Long-press a house** to mark a sale (not double-tap, which zooms the map), with a quick undo
-- **Live sale alert:** when someone makes a sale, everyone in the session gets a notification ("Jas just closed a sale on Oak St!") and the house lights up on their map
-- **Leaderboard:** a small in-session leaderboard of sales per person
+### Leads
+Crews selling things like painting or roofing rarely make a sale at the door. The goal is a lead: the homeowner's number and interest, so the company can call back to book a quote. Leads are graded by the person who got them:
+- **A:** wants it done now and is ready to work with the company. The best case
+- **B:** wants it later, but not too far off (within about a year)
+- **C:** no particular interest, but their number is useful for automated calls and texts
+
+How it works in the app:
+- Every house is assumed no lead. No need to keep the app open to log each door
+- **Long-press a house → tap A, B or C** (not double-tap, which zooms the map), with a quick undo
+- **The app records only the grade**, not names or phone numbers. Contact details go in whatever form or CRM the company already uses. Knockd is for coordination and geography, not a CRM
+- **Live lead alert:** everyone in the session gets a notification ("Jas just got an A lead on Oak St!") and the house lights up on their map
+- **Leaderboard:** a small in-session leaderboard of leads per person, by grade
 
 ### End-of-day stats
-Plain stats, per person and for the crew: streets worked vs passed, blocks completed, houses covered, sales, distance, active time.
+Plain stats, per person and for the crew: streets worked vs passed, blocks completed, houses covered, leads by grade, distance, active time.
 
 ### Uploading to a team
 - At the end of a session, everyone in it who's on a team gets a prompt listing their teams: "Add to London Painters?"
 - Plans from the team's plan library can be loaded into planning mode as a starting point (see Web App)
 
 ### Loading team data into a session
-Crews use previous customers nearby as references ("we just painted the Hendersons' place down the street"). So a session can show data from a team map:
+Crews use previous leads nearby as references ("we just did a quote for the place down the street"). So a session can show data from a team map:
 - When creating a session, a creator with an account can pick one of their team maps (e.g. London D2D) and choose which data to load:
-  - **Previous customers:** houses marked as a sale in past sessions, with how long ago. On by default
+  - **Previous leads:** houses graded in past sessions, with grade and how long ago. On by default, filterable by grade (e.g. A only)
   - **Past coverage:** "hit X time ago" paths, with the same fading as the web map
-  - **Sale-rate colours:** blocks coloured green to red
+  - **Lead-rate colours:** blocks coloured green to red
 - Only data inside the session's area is loaded, and it's downloaded when the session starts so it works offline
-- Previous customers show a small badge on the house. Tap it to see "Sale · 8 months ago"
+- Previous leads show a small grade badge on the house. Tap it to see "A lead · 8 months ago"
+- The app doesn't know which leads became jobs (that's in the company's CRM), so references are shown as leads, not confirmed customers
 - **Everyone in the session sees loaded data**, including guests
 - Each person can toggle each layer on or off on their own phone, so the map doesn't get cluttered
 - Off by default, so the live map stays focused on today unless the creator loads something
-- *Nice to have:* planning suggestions that prefer blocks near previous customers
+- *Nice to have:* planning suggestions that prefer blocks near previous leads
 
 ### Offline
-- GPS points, sales and planning changes are stored on the phone (SQLite), each with a unique ID
+- GPS points, leads and planning changes are stored on the phone (SQLite), each with a unique ID
 - Sent when the connection comes back. The server ignores duplicates
 - Worked/passed-by classification uses the GPS timestamps, so delayed uploads don't affect it
 
@@ -135,25 +143,26 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - **Age:** a multiplier that fades paths over an adjustable fade time (default 4 months). After that, old work stays just barely visible
 - Repeat visits stack, so a street worked three times looks darker than one worked once
 
-**Block colour shows sale rate** (sales ÷ houses worked):
-- 🟢 Green: lots of sales, good money-making houses
+**Block colour shows lead rate** ((A + B leads) ÷ houses worked):
+- 🟢 Green: lots of A/B leads, good money-making houses
 - 🟡 Yellow: average
-- 🔴 Red: no sales
-- ⚪ Grey: not enough data yet. A block stays neutral until enough houses have been worked there (e.g. 15+), and small samples are nudged toward the team's average so one lucky sale doesn't paint a block green
+- 🔴 Red: no A/B leads
+- ⚪ Grey: not enough data yet. A block stays neutral until enough houses have been worked there (e.g. 15+), and small samples are nudged toward the team's average so one lucky lead doesn't paint a block green
+- **C leads don't count toward colour.** An area can produce lots of C leads (or one great salesperson can) without the area actually using the service much. C leads are still shown in stats
 - The colour scale changes in lightness as well as hue, so it still reads for colour-blind users
 
 ### Core features
 - **Time slider:** replay how the territory filled in ("show the map as of 3 weeks ago")
 - **Filters:** date range, crew, neighbourhood
-- **Stats:** coverage, houses worked, distance, sales, and **sale rate** = sales ÷ houses, per session or per area
+- **Stats:** coverage, houses worked, distance, leads by grade, and **lead rate** = (A + B leads) ÷ houses worked, per session or per area
 - **"Hit X time ago"** for any street or block
 - **Where next?:** a simple ranking of how wealthy an area is (census median household income) × how long since it was last hit
 - **Plan library:** a boss sits down and makes several plans (blocks assigned per person or pair). The crew picks one in the field, it loads into mobile planning mode, and it's marked as used once a session runs it. Plans belong to the team and can be tied to a map
 - **Previous paths and session history:** replay any past session and see which streets each person walked
 
 ### Nice to have
-- Demographics overlay (income, homeownership, home age, density) and demographics compared with sales
-- Smarter "where next?" that also uses past sale rate
+- Demographics overlay (income, homeownership, home age, density) and demographics compared with lead rate
+- Smarter "where next?" that also uses past lead rate
 - Best time to knock, by hour (5–8pm is already the established default)
 - Plan vs actual: blocks assigned vs blocks actually worked
 - **Gemini add-on:** "ask your data" questions like "which neighbourhoods sold best in October?", turned into read-only SQL on the team's data
@@ -164,10 +173,10 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - Joining a live session: no account needed, just a code and a name
 - Uploading to a team and viewing team maps: account and team membership required
 - **Uploading:** at the end of a session, anyone in it who's on a team can upload it. Uploads are deduplicated by (team, session ID), so if everyone taps "add" it's only stored once. A session can go to more than one team, once each
-- **Loaded team data** (e.g. previous customers) is visible to everyone in the session, including guests, since anyone knocking benefits from references
+- **Loaded team data** (e.g. previous leads) is visible to everyone in the session, including guests, since anyone knocking benefits from references
 - **Everyone's paths are uploaded**, including guests without accounts. The join screen says so: "your path may be saved to the crew's team map"
 - **Grace period:** session data stays on the server for about 7 days so someone can upload it later if everyone skipped the prompt or a phone died. Sessions nobody uploads are deleted after that
-- After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and sales are saved. The raw GPS points are deleted
+- After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and lead grades are saved. No names or phone numbers are ever stored. The raw GPS points are deleted
 - **Positioning:** the history is the crew's shared memory, not a way for a manager to track people. Paths are saved as streets walked per session, not a minute-by-minute record of where someone was
 
 **Designing Phase 1 so Phase 2 is easy:**
@@ -243,9 +252,9 @@ Check how many prize tracks one project can enter.
 - Web app: split once those are done
 
 **Priorities:**
-1. Mobile: sessions, live map, worked vs passed-by streets, blocks, sales, planning mode, simulated crew mode
+1. Mobile: sessions, live map, worked vs passed-by streets, blocks, A/B/C leads, planning mode, simulated crew mode
 2. Server and database on Vultr + Tiger Data, with uploads to teams
-3. Web: team map with paths and sale-rate colours, time slider, stats
+3. Web: team map with paths and lead-rate colours, time slider, stats
 4. Everything else in the web section
 
 **Demo:** seed the database with a few weeks of fake past sessions so the web map already has history. Then run a simulated session on the phone and show it appear on the web map after upload.
