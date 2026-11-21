@@ -22,6 +22,13 @@
       "when": 1795235231373,
       "tag": "0002_timescale",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795236975476,
+      "tag": "0003_session_planned_area",
+      "breakpoints": true
     }
   ]
 }

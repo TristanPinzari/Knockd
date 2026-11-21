@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "planned_area" geometry(Polygon, 4326) NOT NULL;

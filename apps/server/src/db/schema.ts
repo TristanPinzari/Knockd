@@ -134,8 +134,10 @@ export const sessions = pgTable(
     joinCode: text("join_code").notNull(),
     /** null when a guest created it */
     createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
-    /** The creator's member row. Set right after the member is inserted, so nullable. */
+    /** The creator's member row (the session admin). Set right after the member is inserted, so nullable. */
     createdByMemberId: uuid("created_by_member_id"),
+    /** Picked when creating the session (pin + radius converted to a polygon, or drawn). Split into blocks for planning. */
+    plannedArea: geometry("planned_area", "Polygon").notNull(),
     status: sessionStatus("status").notNull().default("live"),
     startedAt: ts("started_at").notNull().defaultNow(),
     endedAt: ts("ended_at"),

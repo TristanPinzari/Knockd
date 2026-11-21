@@ -32,13 +32,25 @@ export type SessionStatus = z.infer<typeof SessionStatus>;
 export const Layer = z.enum(["leads", "coverage", "leadRate"]);
 export type Layer = z.infer<typeof Layer>;
 
+export const MAX_SESSION_MEMBERS = 8;
+
+/** The planned area picked when creating a session: pin + radius, or drawn. */
+export const SessionAreaInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("circle"), center: LatLng, radiusM: z.number().min(100).max(3000) }),
+  z.object({ kind: z.literal("polygon"), polygon: PolygonGeo }),
+]);
+export type SessionAreaInput = z.infer<typeof SessionAreaInput>;
+
 export const Session = z.object({
   id: Uuid,
   joinCode: z.string(),
   status: SessionStatus,
   startedAt: Timestamp,
   endedAt: Timestamp.nullable(),
+  /** The session admin. Only they can end the session or remove members. */
   createdByMemberId: Uuid,
+  /** The planned area as a GeoJSON polygon (circles are converted server-side). */
+  plannedArea: PolygonGeo,
   loadedMap: z.object({ mapId: Uuid, name: z.string(), layers: z.array(Layer) }).nullable(),
 });
 export type Session = z.infer<typeof Session>;

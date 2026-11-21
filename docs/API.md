@@ -39,7 +39,7 @@ Send `Authorization: Bearer <token>` on every request. There are two kinds of to
   ```json
   { "error": { "code": "session_not_found", "message": "No session with that code" } }
   ```
-- Common codes: `400 invalid_request`, `401 unauthorized`, `403 forbidden`, `404 not_found`, `409 conflict`, `410 session_ended`
+- Common codes: `400 invalid_request`, `401 unauthorized`, `403 forbidden`, `404 not_found`, `409 conflict`, `409 session_full`, `410 session_ended`
 
 ### Idempotency
 
@@ -47,7 +47,7 @@ Anything a phone might create offline has a **client-generated UUID** (`clientId
 
 ### Map cells
 
-Session areas grow as the crew walks, using a fixed grid of cells about 1 km across.
+Each session has a **planned area** (picked when creating it: pin + radius, or drawn), which is what gets split into blocks for planning. On top of that, the session area grows as the crew walks, using a fixed grid of cells about 1 km across.
 
 - **Cell ID:** `` `${Math.floor(lat * 100)}_${Math.floor(lng * 100)}` ``, e.g. `4298_-8130`. Server and clients compute it the same way
 - The phone loads the cells around each member, and fetches new cells when someone gets within about 500 m of an unloaded one
@@ -91,6 +91,9 @@ Create a session. Guests can create sessions. If an account token is sent, the s
 {
   displayName: string,
   location: { lat, lng },
+  area:                                                                  // the planned area
+    | { kind: "circle", center: { lat, lng }, radiusM: number }          // pin + radius (100–3000 m)
+    | { kind: "polygon", polygon: GeoJSON Polygon },                     // drawn
   loadMap?: { mapId, layers: ("leads" | "coverage" | "leadRate")[] }   // account only
 }
 → { session, joinCode, member, token }
@@ -102,7 +105,7 @@ Create a session. Guests can create sessions. If an account token is sent, the s
 { code: string, displayName: string } → { session, member, token }
 ```
 
-Errors: `404 session_not_found`, `410 session_ended`
+Errors: `404 session_not_found`, `409 session_full` (8 members max), `410 session_ended`
 
 ### `GET /v1/sessions/:id` 🎟️
 
@@ -121,9 +124,13 @@ Snapshot for first load and reconnecting.
 
 ### `POST /v1/sessions/:id/end` 🎟️
 
-Creator only. Broadcasts `session:ended` and queues processing.
+Session admin (the creator) only. Broadcasts `session:ended` and queues processing.
 
 ### `POST /v1/sessions/:id/leave` 🎟️
+
+### `DELETE /v1/sessions/:id/members/:memberId` 🎟️
+
+Session admin (the creator) only. Removes a member and invalidates their session token. Broadcasts `member:left`.
 
 ### `GET /v1/sessions/:id/area?cells=4298_-8130,4298_-8129` 🎟️
 
@@ -349,6 +356,14 @@ Coverage, houses worked, distance, leads by grade, lead rate.
 ### `GET /v1/geo/blocks?bbox=` 👤
 
 Blocks and house counts for building plans on the web, outside a session.
+
+---
+
+## Map tiles
+
+### `GET /tiles/london.pmtiles` 🔓
+
+The basemap as a Protomaps PMTiles file, for MapLibre. Supports HTTP range requests. Not under `/v1` since it's a static file.
 
 ---
 
