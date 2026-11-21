@@ -198,7 +198,7 @@ This is peer-to-peer. Teammates see each other, not a manager seeing subordinate
 
 - React Native + Expo (cross-platform iOS/Android — satisfies the platform requirement above)
 - Google Maps SDK for the map layer (react-native-maps; streets as polylines, blocks and houses as polygons)
-- Node + Socket.io server for live sync: dots, trails, pins, chat and planning, with one room per session code
+- **Express + Socket.io** server: one backend for both the mobile and web apps. REST API for teams, maps, plans and uploads; Socket.io for live sync (dots, trails, pins, chat, leads and planning), with one room per session code
 - **Tiger Data** (Postgres + PostGIS + TimescaleDB) as the database:
   - Hypertable for GPS pings during a session
   - PostGIS streets, blocks and house footprints
@@ -208,13 +208,13 @@ This is peer-to-peer. Teammates see each other, not a manager seeing subordinate
 - **OSRM** map matching to snap GPS trails onto real streets
 - Hosted on a **Vultr** VM (Docker Compose via Coolify) running the Socket.io server and OSRM
 - **Auth0** for accounts and team invites (shared by mobile and the web app)
-- Web app: Next.js using the same server API and Google Maps. Census data (median household income for "where next?", plus demographics) loaded into PostGIS from Statistics Canada dissemination areas
+- Web app: React single-page app (Vite) using the Express API and Google Maps. No server-side rendering needed since everything is behind a login. Census data (median household income for "where next?", plus demographics) loaded into PostGIS from Statistics Canada dissemination areas
 - Data model: teams → members, sessions (unique per team + session ID), plans. Maps are saved views (boundary polygon + filters) over the team's sessions
 - **Gemini:** optional web add-on for "ask your data". No role on mobile
 
 ```
 Phones  <--websockets-->  Vultr VM                    -->  Tiger Data
-                          ├─ Node/Socket.io server         (Postgres + PostGIS)
+Web app  <--REST-->       ├─ Express + Socket.io server    (Postgres + PostGIS)
                           └─ OSRM map matching
 ```
 
