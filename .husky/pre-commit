@@ -1,0 +1,12 @@
+# Same checks as CI (.github/workflows/ci.yml).
+# Uses pnpm if it's installed, otherwise falls back to corepack (bundled with Node).
+if command -v pnpm >/dev/null 2>&1; then
+  PNPM="pnpm"
+else
+  PNPM="corepack pnpm"
+fi
+
+$PNPM exec lint-staged
+$PNPM -r --filter "!knockd" --if-present typecheck
+$PNPM -r --filter "!knockd" --if-present lint
+$PNPM -r --filter "!knockd" --if-present test

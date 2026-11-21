@@ -5,7 +5,8 @@
  */
 import { z } from "zod";
 import { RefId, Uuid } from "./common";
-import { Drawing, Lead, Member, Message, Note, Pin, PlanContent, PlanGroup, Position } from "./entities";
+import type { Lead, Member, Message, Pin, PlanContent, Position } from "./entities";
+import { Drawing, Note, PlanGroup } from "./entities";
 
 /** Sent as `io(url, { auth: SocketAuth })` */
 export const SocketAuth = z.object({ token: z.string() });

@@ -36,7 +36,9 @@ export const DisplayName = z.string().trim().min(1).max(40);
 
 export const PointGeo = z.custom<Point>((v) => isGeo(v, "Point"));
 export const PolygonGeo = z.custom<Polygon | MultiPolygon>((v) => isGeo(v, "Polygon") || isGeo(v, "MultiPolygon"));
-export const LineGeo = z.custom<LineString | MultiLineString>((v) => isGeo(v, "LineString") || isGeo(v, "MultiLineString"));
+export const LineGeo = z.custom<LineString | MultiLineString>(
+  (v) => isGeo(v, "LineString") || isGeo(v, "MultiLineString"),
+);
 export const FeatureCollectionGeo = z.custom<FeatureCollection>((v) => isGeo(v, "FeatureCollection"));
 
 function isGeo(v: unknown, type: string): boolean {
@@ -46,29 +48,36 @@ function isGeo(v: unknown, type: string): boolean {
 // ---------- Bounding box (query param) ----------
 
 /** Query param `bbox=minLng,minLat,maxLng,maxLat` */
-export const Bbox = z
-  .string()
-  .transform((s, ctx) => {
-    const parts = s.split(",").map(Number);
-    const [minLng, minLat, maxLng, maxLat] = parts;
-    if (
-      parts.length !== 4 ||
-      parts.some((n) => !Number.isFinite(n)) ||
-      minLng === undefined || minLat === undefined || maxLng === undefined || maxLat === undefined ||
-      minLng >= maxLng || minLat >= maxLat
-    ) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "bbox must be minLng,minLat,maxLng,maxLat" });
-      return z.NEVER;
-    }
-    return { minLng, minLat, maxLng, maxLat };
-  });
+export const Bbox = z.string().transform((s, ctx) => {
+  const parts = s.split(",").map(Number);
+  const [minLng, minLat, maxLng, maxLat] = parts;
+  if (
+    parts.length !== 4 ||
+    parts.some((n) => !Number.isFinite(n)) ||
+    minLng === undefined ||
+    minLat === undefined ||
+    maxLng === undefined ||
+    maxLat === undefined ||
+    minLng >= maxLng ||
+    minLat >= maxLat
+  ) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "bbox must be minLng,minLat,maxLng,maxLat" });
+    return z.NEVER;
+  }
+  return { minLng, minLat, maxLng, maxLat };
+});
 export type Bbox = z.infer<typeof Bbox>;
 
 /** Comma-separated list in a query param, e.g. `grades=A,B` */
 export const csv = <T extends z.ZodTypeAny>(item: T) =>
   z
     .string()
-    .transform((s) => s.split(",").map((x) => x.trim()).filter(Boolean))
+    .transform((s) =>
+      s
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean),
+    )
     .pipe(z.array(item));
 
 // ---------- Errors ----------
