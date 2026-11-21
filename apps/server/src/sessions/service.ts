@@ -20,9 +20,10 @@ import {
   type SessionAreaRes,
   type SessionSnapshotRes,
 } from "@knockd/shared";
-import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import type { MultiPolygon, Polygon } from "geojson";
 import { signSessionToken } from "../auth/session-token";
 import { db } from "../db/client";
+import { envelope, featureCollection, pgErrorCode, PG_UNIQUE_VIOLATION } from "../db/sql-helpers";
 import { chatMessages, leads, maps, pins, sessionCells, sessionMembers, sessionPlans, sessions } from "../db/schema";
 import { forbidden, HttpError, notFound } from "../http/errors";
 import { enqueueProcessing } from "../jobs/scheduler";
@@ -72,7 +73,7 @@ export async function createSession(body: CreateSessionBody, userId?: string): P
       });
       return await accessResponse(sessionId, memberId);
     } catch (err) {
-      if (isUniqueViolation(err)) continue; // join code collided with a live session; try another
+      if (pgErrorCode(err) === PG_UNIQUE_VIOLATION) continue; // join code collided with a live session; try another
       throw err;
     }
   }
@@ -211,20 +212,21 @@ export async function getArea(sessionId: string, cells: CellId[]): Promise<Sessi
   const result = await Promise.all(
     unique.map(async (id) => {
       const b = cellBounds(id);
-      const env = sql`ST_MakeEnvelope(${b.minLng}, ${b.minLat}, ${b.maxLng}, ${b.maxLat}, 4326)`;
+      const env = envelope(b);
       const [streetsFc, blocksFc, housesFc] = await Promise.all([
         featureCollection(sql`
-          SELECT id, ST_AsGeoJSON(geom, 6)::json AS geometry,
-                 json_build_object('streetId', id, 'name', name, 'lengthM', round(length_m)) AS properties
+          SELECT json_build_object('type', 'Feature', 'id', id, 'geometry', ST_AsGeoJSON(geom, 6)::json,
+                 'properties', json_build_object('streetId', id, 'name', name, 'lengthM', round(length_m))) AS f
           FROM streets WHERE geom && ${env} AND ST_Intersects(geom, ${env})`),
         featureCollection(sql`
-          SELECT id, ST_AsGeoJSON(geom, 6)::json AS geometry,
-                 json_build_object('blockId', id, 'houseCount', house_count) AS properties
+          SELECT json_build_object('type', 'Feature', 'id', id, 'geometry', ST_AsGeoJSON(geom, 6)::json,
+                 'properties', json_build_object('blockId', id, 'houseCount', house_count)) AS f
           FROM blocks WHERE geom && ${env} AND ST_Intersects(geom, ${env})`),
         // Houses belong to exactly one cell, by centroid (half-open bounds so edges aren't doubled).
         featureCollection(sql`
-          SELECT id, ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.000005), 6)::json AS geometry,
-                 json_build_object('houseId', id, 'blockId', block_id, 'streetId', street_id) AS properties
+          SELECT json_build_object('type', 'Feature', 'id', id,
+                 'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.000005), 6)::json,
+                 'properties', json_build_object('houseId', id, 'blockId', block_id, 'streetId', street_id)) AS f
           FROM houses
           WHERE centroid && ${env}
             AND ST_X(centroid) >= ${b.minLng} AND ST_X(centroid) < ${b.maxLng}
@@ -234,17 +236,6 @@ export async function getArea(sessionId: string, cells: CellId[]): Promise<Sessi
     }),
   );
   return { cells: result };
-}
-
-async function featureCollection(query: ReturnType<typeof sql>): Promise<FeatureCollection> {
-  const rows = await db.execute<{ fc: FeatureCollection }>(sql`
-    SELECT json_build_object(
-      'type', 'FeatureCollection',
-      'features', coalesce(json_agg(json_build_object(
-        'type', 'Feature', 'id', f.id, 'geometry', f.geometry, 'properties', f.properties)), '[]'::json)
-    ) AS fc
-    FROM (${query}) f`);
-  return rows[0]!.fc;
 }
 
 // ============================== End, leave, remove ==============================
@@ -376,9 +367,4 @@ async function checkDrawnArea(area: ReturnType<typeof sql>) {
   if (!row?.valid) throw new HttpError(400, "invalid_request", "The drawn area crosses over itself");
   if (row.km2 > MAX_DRAWN_AREA_KM2)
     throw new HttpError(400, "invalid_request", `The drawn area is too big (max ${MAX_DRAWN_AREA_KM2} km²)`);
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e.code === "23505" || e.cause?.code === "23505";
 }

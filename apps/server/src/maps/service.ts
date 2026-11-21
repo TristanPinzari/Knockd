@@ -22,6 +22,7 @@ import type {
 import { cellBounds, type CellId } from "@knockd/shared";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { db } from "../db/client";
+import { envelope, featureCollection } from "../db/sql-helpers";
 import { maps, sessions } from "../db/schema";
 import { notFound } from "../http/errors";
 import { queryHighlights, queryNotes } from "../teams/markings";
@@ -138,8 +139,6 @@ function scopeSessions(m: MapRow, asOf?: string): SQL {
 const inBoundary = (m: MapRow, geom: SQL) =>
   m.boundary ? sql`AND ST_Intersects(${geom}, (SELECT boundary FROM maps WHERE id = ${m.id}))` : sql``;
 
-const envelope = (b: Bbox) => sql`ST_MakeEnvelope(${b.minLng}, ${b.minLat}, ${b.maxLng}, ${b.maxLat}, 4326)`;
-
 // ============================== Queries ==============================
 
 /**
@@ -148,26 +147,22 @@ const envelope = (b: Bbox) => sql`ST_MakeEnvelope(${b.minLng}, ${b.minLat}, ${b.
  */
 export async function mapPaths(m: MapRow, bbox: Bbox, asOf?: string): Promise<FeatureCollection> {
   const env = envelope(bbox);
-  const [row] = await db.execute<{ fc: FeatureCollection }>(sql`
-    SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(f), '[]'::json)) AS fc
-    FROM (
-      SELECT json_build_object(
-        'type', 'Feature',
-        'geometry', ST_AsGeoJSON(st.geom, 6)::json,
-        'properties', json_build_object(
-          'sessionId', c.session_id, 'memberName', m.display_name, 'streetId', st.id,
-          'durationS', c.duration_s, 'classification', c.classification, 'workedAt', c.last_seen)) AS f
-      FROM session_street_coverage c
-      JOIN streets st ON st.id = c.street_id
-      JOIN session_members m ON m.id = c.member_id
-      WHERE c.session_id IN ${scopeSessions(m, asOf)}
-        ${asOf ? sql`AND c.first_seen <= ${asOf}` : sql``}
-        AND st.geom && ${env}
-        ${inBoundary(m, sql`st.geom`)}
-      ORDER BY c.last_seen DESC
-      LIMIT ${MAX_FEATURES}
-    ) x`);
-  return row!.fc;
+  return featureCollection(sql`
+    SELECT json_build_object(
+      'type', 'Feature',
+      'geometry', ST_AsGeoJSON(st.geom, 6)::json,
+      'properties', json_build_object(
+        'sessionId', c.session_id, 'memberName', m.display_name, 'streetId', st.id,
+        'durationS', c.duration_s, 'classification', c.classification, 'workedAt', c.last_seen)) AS f
+    FROM session_street_coverage c
+    JOIN streets st ON st.id = c.street_id
+    JOIN session_members m ON m.id = c.member_id
+    WHERE c.session_id IN ${scopeSessions(m, asOf)}
+      ${asOf ? sql`AND c.first_seen <= ${asOf}` : sql``}
+      AND st.geom && ${env}
+      ${inBoundary(m, sql`st.geom`)}
+    ORDER BY c.last_seen DESC
+    LIMIT ${MAX_FEATURES}`);
 }
 
 /** Per-block results with the smoothed lead rate (null = not enough data yet). */
@@ -335,13 +330,11 @@ export async function whereNext(m: MapRow, near: { lat: number; lng: number }, l
 
 /** Blocks with house counts in a bbox (for building plans on the web, outside a session). */
 export async function geoBlocks(bbox: Bbox): Promise<FeatureCollection> {
-  const env = envelope(bbox);
-  const [row] = await db.execute<{ fc: FeatureCollection }>(sql`
-    SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(json_build_object(
-      'type', 'Feature', 'id', id, 'geometry', ST_AsGeoJSON(geom, 6)::json,
-      'properties', json_build_object('blockId', id, 'houseCount', house_count))), '[]'::json)) AS fc
-    FROM (SELECT id, geom, house_count FROM blocks WHERE geom && ${env} LIMIT ${MAX_FEATURES}) b`);
-  return row!.fc;
+  return featureCollection(sql`
+    SELECT json_build_object('type', 'Feature', 'id', id, 'geometry', ST_AsGeoJSON(geom, 6)::json,
+           'properties', json_build_object('blockId', id, 'houseCount', house_count)) AS f
+    FROM blocks WHERE geom && ${envelope(bbox)}
+    LIMIT ${MAX_FEATURES}`);
 }
 
 // ============================== Team data loaded into a session ==============================

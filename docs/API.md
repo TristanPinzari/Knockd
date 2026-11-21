@@ -105,7 +105,7 @@ Create a session. Guests can create sessions. If an Auth0 account token is sent 
 { code: string, displayName: string } → { session, member, token }
 ```
 
-Errors: `404 session_not_found`, `409 session_full` (8 members max), `410 session_ended`
+Errors: `400 invalid_request` (not a valid 6-character code), `404 session_not_found`, `409 session_full` (8 members max), `410 session_ended`
 
 Optionally send an account token, as with create. A logged-in user who is already in the session (e.g. reinstalled the app) gets their existing member and a fresh token back, with no duplicate.
 

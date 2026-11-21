@@ -77,49 +77,50 @@ An overview. The source of truth is the Drizzle schema in [apps/server/src/db/sc
 
 ### Accounts and teams
 
-| Table          | Key columns                                                                                                            |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `users`        | id, auth0_sub, display_name                                                                                            |
-| `teams`        | id, name, created_by                                                                                                   |
-| `team_members` | team_id, user_id, role (`owner` / `admin` / `member`)                                                                  |
-| `team_invites` | token, team_id, created_by, expires_at                                                                                 |
-| `maps`         | id, team_id, name, boundary (polygon, null = no boundary), filters (jsonb, e.g. date range)                            |
-| `plans`        | id, team_id, map_id (nullable), name, assignments (jsonb: block IDs per person or pair), used_in_session_id (nullable) |
+| Table             | Key columns                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `users`           | id, auth0_sub, display_name                                                        |
+| `teams`           | id, name, fade_days (how long map paths take to fade), created_by                  |
+| `team_members`    | team_id, user_id, role (`owner` / `editor` / `viewer`)                             |
+| `team_invites`    | token, team_id, created_by, expires_at                                             |
+| `maps`            | id, team_id, name, boundary (MultiPolygon, null = no boundary), from_date, to_date |
+| `team_highlights` | id, team_id, geom (LineString or Polygon), colour (one of 6 presets), created_by   |
+| `team_notes`      | id, team_id, location (Point), text, created_by                                    |
 
 ### Live sessions
 
-| Table             | Key columns                                                                                                                                                                                                    |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sessions`        | id, join_code, created_by (nullable for guests), created_by_member_id (the session admin), status (`live` / `ended` / `processed`), started_at, ended_at, planned_area (polygon), loaded_map_id, loaded_layers |
-| `session_cells`   | session_id, cell_id. The session area grows as cells are loaded (~1 km grid, see [API.md](API.md#map-cells)), on top of the planned area                                                                       |
-| `session_members` | id, session_id, user_id (nullable for guests), display_name, colour, joined_at                                                                                                                                 |
-| `pings`           | **hypertable**: time, session_id, member_id, location (point), accuracy, client_id (unique)                                                                                                                    |
-| `leads`           | id (client UUID), session_id, member_id, house_id, grade (`A` / `B` / `C`), created_at, deleted_at (undo)                                                                                                      |
-| `pins`            | id, session_id, member_id, location, created_at                                                                                                                                                                |
-| `chat_messages`   | id (client UUID), session_id, member_id, body, created_at                                                                                                                                                      |
-| `session_plans`   | session_id, state (`draft` / `applied`), assignments, drawings (jsonb), updated_at                                                                                                                             |
+| Table             | Key columns                                                                                                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessions`        | id, join_code (unique among live sessions), created_by_user_id (null for guests), created_by_member_id (the session admin), status (`live` / `ended` / `processed`), started_at, ended_at, planned_area (Polygon), loaded_map_id, loaded_layers |
+| `session_cells`   | session_id, cell_id. Map cells loaded so far (~1 km grid, see [API.md](API.md#map-cells))                                                                                                                                                       |
+| `session_members` | id, session_id, user_id (null for guests and bots), display_name, colour, is_bot, joined_at, left_at, removed_at                                                                                                                                |
+| `pings`           | **hypertable**: time, session_id, member_id, client_id, location (Point), accuracy_m. Unique (client_id, time)                                                                                                                                  |
+| `leads`           | **hypertable**: id (client UUID), created_at (from the phone), session_id, member_id, house_id, grade (`A` / `B` / `C`), note, updated_at, deleted_at (undo). PK (id, created_at)                                                               |
+| `pins`            | id (client UUID), session_id, member_id, location, label, deleted_at                                                                                                                                                                            |
+| `chat_messages`   | id (client UUID), session_id, member_id, body                                                                                                                                                                                                   |
+| `session_plans`   | session_id, plan (jsonb: claims, drawings, notes, each with authorId), version (+1 per edit), updated_at                                                                                                                                        |
 
 ### Processed session results
 
-Written by the end-of-session job. Kept forever for uploaded sessions.
+Written by end-of-session processing. Kept forever for uploaded sessions.
 
-| Table                     | Key columns                                                                                                    |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `session_paths`           | session_id, member_id, path (matched linestring)                                                               |
-| `session_street_coverage` | session_id, member_id, street_id, duration_s, classification (`worked` / `passed`), first_seen, last_seen      |
-| `session_block_stats`     | session_id, block_id, houses_worked, leads_a, leads_b, leads_c                                                 |
-| `team_sessions`           | team_id, session_id, uploaded_by, uploaded_at. **Primary key (team_id, session_id)** to stop duplicate uploads |
+| Table                     | Key columns                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `session_paths`           | session_id, member_id, path (MultiLineString, snapped to streets), distance_m                                                     |
+| `session_street_coverage` | **hypertable**: session_id, member_id, street_id, duration_s, classification (`worked` / `passed`), houses, first_seen, last_seen |
+| `session_block_stats`     | session_id, block_id, houses_worked, leads_a, leads_b, leads_c, last_worked_at                                                    |
+| `team_sessions`           | team_id, session_id, uploaded_by, uploaded_at. **Primary key (team_id, session_id)** to stop duplicate uploads                    |
 
 ### Map reference data
 
 Imported once per region by scripts.
 
-| Table          | Key columns                                                        |
-| -------------- | ------------------------------------------------------------------ |
-| `streets`      | id, name, geom (linestring), length_m                              |
-| `blocks`       | id, geom (polygon), house_count                                    |
-| `houses`       | id, geom (polygon), centroid, block_id, street_id (nearest street) |
-| `census_areas` | dguid, geom (polygon), median_household_income                     |
+| Table          | Key columns                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| `streets`      | id, osm_id, name, geom (LineString, split at every intersection), length_m |
+| `blocks`       | id, geom (Polygon), house_count                                            |
+| `houses`       | id, geom (Polygon), centroid, block_id, street_id (nearest street)         |
+| `census_areas` | dguid, geom (MultiPolygon), median_household_income                        |
 
 ---
 
@@ -139,8 +140,8 @@ Imported once per region by scripts.
 
 ### In-memory state
 
-- The server keeps each live session's state in memory: members, latest positions, online status and the current plan draft
-- Everything that matters is also written to the database (pings, leads, pins, chat, plan), so a server restart only loses the in-memory snapshot, which is rebuilt from the database
+- The server keeps only online presence in memory (who's connected, plus simulated-crew bots). Everything else (members, pings, leads, pins, chat, the plan) is in the database
+- So a server restart (e.g. a redeploy) only drops socket connections: phones reconnect and refetch the snapshot. A running simulated crew stops and has to be restarted
 - Single server only. If there's ever more than one, add the Socket.io Redis adapter
 
 ### Pings
