@@ -235,7 +235,7 @@ export async function removeTeamSession(teamId: string, userId: string, sessionI
 export async function listTeamSessions(
   teamId: string,
   userId: string,
-  range: { from?: string; to?: string },
+  range: { from?: string; to?: string; sessionId?: string },
 ): Promise<TeamSessionSummary[]> {
   await requireMember(teamId, userId);
   const rows = await db.execute<{
@@ -264,6 +264,7 @@ export async function listTeamSessions(
     WHERE ts.team_id = ${teamId}
       ${range.from ? sql`AND s.started_at >= ${range.from}` : sql``}
       ${range.to ? sql`AND s.started_at < ${range.to}` : sql``}
+      ${range.sessionId ? sql`AND s.id = ${range.sessionId}` : sql``}
     ORDER BY s.started_at DESC
     LIMIT 200`);
   return rows.map((r) => ({

@@ -19,7 +19,8 @@
     "smoke:maps": "tsx scripts/smoke-maps.ts",
     "data:download": "tsx scripts/london/download.ts",
     "data:import": "tsx scripts/london/import.ts",
-    "data:census": "tsx scripts/london/census.ts"
+    "data:census": "tsx scripts/london/census.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@knockd/shared": "workspace:*",

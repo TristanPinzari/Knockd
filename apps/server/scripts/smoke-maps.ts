@@ -148,6 +148,22 @@ socket.close();
 const up = await call("POST", `/v1/teams/${teamId}/sessions`, { sessionId: s1.session.id }, token);
 check("walk a street, mark a lead, end, upload", up.json?.uploaded === true);
 
+const replay = await call("GET", `/v1/teams/${teamId}/sessions/${s1.session.id}`, undefined, token);
+check(
+  "session replay: path, worked street, lead with note, final stats",
+  replay.json?.paths?.features?.length === 1 &&
+    replay.json?.coverage?.features?.some(
+      (f: { properties: { classification: string } }) => f.properties.classification === "worked",
+    ) &&
+    replay.json?.leads?.[0]?.note === "loved our work" &&
+    replay.json?.stats?.final === true,
+  `${replay.json?.paths?.features?.[0]?.properties?.distanceM} m walked`,
+);
+check(
+  "replay of a session not on the team → 404",
+  (await call("GET", `/v1/teams/${teamId}/sessions/${randomUUID()}`, undefined, token)).status === 404,
+);
+
 // ---------- map queries ----------
 const paths = await call("GET", `${W}/paths?bbox=${BYRON_BBOX}`, undefined, token);
 const worked = paths.json?.features?.filter(

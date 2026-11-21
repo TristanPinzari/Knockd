@@ -313,7 +313,7 @@ Check how many prize tracks one project can enter.
 
 **Demo (about 3 minutes):**
 
-1. Show the web team map with weeks of seeded London history
+1. Show the web team map with weeks of seeded Byron history (`pnpm --filter @knockd/server seed:demo`: 12 sessions, 93 leads, lead-rate colours)
 2. On the phone, create a session, pick an area, tap Suggest
 3. Start simulated crew mode, and the map fills in live
 4. Mark an A lead and watch the alert appear for everyone

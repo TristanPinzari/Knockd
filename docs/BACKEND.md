@@ -256,7 +256,7 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
 - Each bot follows a scripted route (GeoJSON, walking pace with stops at houses) and sends pings exactly like a phone, so the server handles them as normal traffic
 - Bots occasionally mark leads, so lead alerts and the leaderboard have something to show
 - Started from a dev-only endpoint or script
-- **Demo seeding script:** generates a few weeks of past sessions for a team, runs them through the same processing job, and uploads them so the web map has history
+- **Demo seed** (`pnpm --filter @knockd/server seed:demo`, [scripts/seed-demo.ts](../apps/server/scripts/seed-demo.ts)): creates the "Knockd Demo" team (World + Byron maps, 2 library plans) with 12 past sessions over 6 weeks around Byron. Crews walk real streets at a realistic pace, lead chances follow census income per block, and each session goes through the real processing and is uploaded. Deterministic. Prints a 7-day invite link; `--promote` makes everyone who joined an admin; `--reset` regenerates. The seed owner is a placeholder user (`seed|knockd-demo`) that can't log in
 
 ---
 
