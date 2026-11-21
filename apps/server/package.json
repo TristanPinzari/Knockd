@@ -16,6 +16,7 @@
     "smoke:accounts": "tsx scripts/smoke-accounts.ts",
     "smoke:sim": "tsx scripts/smoke-sim.ts",
     "smoke:processing": "tsx scripts/smoke-processing.ts",
+    "smoke:maps": "tsx scripts/smoke-maps.ts",
     "data:download": "tsx scripts/london/download.ts",
     "data:import": "tsx scripts/london/import.ts",
     "data:census": "tsx scripts/london/census.ts"

@@ -58,6 +58,19 @@ export function editDraft(sessionId: string, memberId: string, op: PlanEditOp): 
   });
 }
 
+/** Replaces the whole draft (e.g. a plan loaded from the library) and broadcasts it. */
+export function replaceDraft(sessionId: string, memberId: string, draft: PlanContent): Promise<PlanContent> {
+  return serialised(sessionId, async () => {
+    await assertLive(sessionId);
+    await db
+      .insert(sessionPlans)
+      .values({ sessionId, draft })
+      .onConflictDoUpdate({ target: sessionPlans.sessionId, set: { draft, updatedAt: new Date() } });
+    emitToSession(sessionId, "plan:draft", { draft, editedBy: memberId });
+    return draft;
+  });
+}
+
 export function applyDraft(sessionId: string): Promise<PlanContent> {
   return serialised(sessionId, async () => {
     await assertLive(sessionId);

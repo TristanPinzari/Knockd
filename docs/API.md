@@ -85,7 +85,7 @@ Your recent sessions, including ones not uploaded yet (kept for 7 days).
 
 ### `POST /v1/sessions` 🔓 (or 👤)
 
-Create a session. Guests can create sessions. If an Auth0 account token is sent (`Authorization: Bearer <account token>`), the session and your member are linked to your account, which you need to upload it to a team later. Loading team data (`loadMap`) is not built yet.
+Create a session. Guests can create sessions. If an Auth0 account token is sent (`Authorization: Bearer <account token>`), the session and your member are linked to your account, which you need to upload it to a team later. `loadMap` (account only) loads one of your team's maps into the session: the map must be on one of your teams (`404` otherwise). Its data is then served by `GET /v1/sessions/:id/layers`.
 
 ```ts
 {
@@ -157,7 +157,7 @@ Loaded team data for the given cells. Empty if no map was loaded. Visible to eve
 ```ts
 → {
   leads?: { houseId, grade, note, at }[],  // at = last updated
-  coverage?: FeatureCollection,          // paths with durationS and lastWorkedAt
+  coverage?: FeatureCollection,          // same features as GET /v1/maps/:id/paths
   leadRate?: { blockId, rate | null, housesWorked }[]   // null = not enough data
 }
 ```
@@ -248,9 +248,9 @@ Messages missed while disconnected.
 
 The draft becomes the applied plan. Broadcasts `plan:applied`.
 
-### `POST /v1/sessions/:id/plan/load` 🎟️ 👤
+### `POST /v1/sessions/:id/plan/load` 🎟️
 
-Load a plan from the team's library as the draft. The account must be on the plan's team.
+Load a plan from the team's library as the draft (groups keep their labels and blocks; people are assigned in the session) and mark the plan as used. Broadcasts `plan:draft`. Uses the session token only: the member must have **joined while logged in** with an account on the plan's team (`401` for guests, `404` if not on the team).
 
 ```ts
 { planId } → { draft }
@@ -324,44 +324,56 @@ Removes the session from the team (and from every map).
 
 ## Maps
 
-Map queries take `bbox=minLng,minLat,maxLng,maxLat` and an optional `asOf` timestamp for the time slider.
+A map is a saved view over the team's **uploaded** sessions: an optional boundary and date range. Queries take `bbox=minLng,minLat,maxLng,maxLat` and an optional `asOf` timestamp for the time slider (only sessions started before it). Results are capped at 5,000 features.
 
 ### `GET /v1/teams/:id/maps` 👤 · `POST /v1/teams/:id/maps` 👤
 
 ```ts
-{ name, boundary?: GeoJSON Polygon, filters?: { from?, to? } } → { map }
+{ name, boundary?: GeoJSON Polygon | MultiPolygon, from?, to? } → { map }   // 201
+// map = { id, teamId, name, boundary | null, from | null, to | null, createdAt }   (no boundary = whole team, e.g. "World Map")
 ```
 
 ### `PATCH /v1/maps/:id` 👤 · `DELETE /v1/maps/:id` 🛡️
 
+PATCH takes any of `{ name, boundary, from, to }`; `null` clears boundary/from/to.
+
 ### `GET /v1/maps/:id/paths?bbox=&asOf=` 👤
 
 ```ts
-→ FeatureCollection   // LineStrings with { sessionId, memberName, durationS, workedAt }
+→ FeatureCollection   // street segments (LineStrings), one per member per street per session
+// properties: { sessionId, memberName, streetId, durationS, classification: "worked" | "passed", workedAt }
 ```
 
-The client calculates visibility (duration × age) using the team's fade time.
+Newest first. The client calculates visibility (duration × age) using the team's `fadeDays`.
 
 ### `GET /v1/maps/:id/blocks?bbox=&asOf=` 👤
 
 ```ts
 → { blocks: { blockId, rate | null, housesWorked, leads: { A, B, C }, lastWorkedAt | null }[] }
+// Only blocks with results. rate = (A + B + 15 × teamRate) / (housesWorked + 15), smoothed toward the
+// map's average; null (grey) until 15 houses have been worked. C leads don't count.
 ```
 
 ### `GET /v1/maps/:id/leads?bbox=&grades=A,B&asOf=` 👤
 
 ```ts
-→ { leads: { houseId, lat, lng, grade, note, at }[] }
+→ { leads: { houseId, lat, lng, grade, note, at }[] }   // latest lead per house; at = last updated
 ```
 
 ### `GET /v1/maps/:id/stats?from=&to=` 👤
 
-Coverage, houses worked, distance, leads by grade, lead rate.
+```ts
+→ { sessions, housesWorked, streetsWorked, distanceM, leads: { A, B, C }, leadRate | null }
+```
+
+`from`/`to` narrow the map's own date range.
 
 ### `GET /v1/maps/:id/where-next?near=lat,lng&limit=10` 👤
 
 ```ts
 → { suggestions: { blockId, centroid, medianIncome, daysSinceWorked | null, score }[] }
+// Blocks with 5+ houses within 3 km of near. score = (income / max income nearby) × min(days since worked, 365) / 365.
+// Never worked = 365 days; unknown income = the area average. limit 1–50 (default 10).
 ```
 
 ---
@@ -376,9 +388,13 @@ Coverage, houses worked, distance, leads by grade, lead rate.
 
 ### `GET /v1/plans/:id` 👤 · `PATCH /v1/plans/:id` 👤 · `DELETE /v1/plans/:id` 👤
 
+- plan = `{ id, teamId, mapId | null, name, groups: { label, blockIds }[], usedInSessionId | null, createdAt, updatedAt }`
+- `?used=false` lists plans not loaded into a session yet
+- Anyone on the team can create and edit plans; the creator or an owner/admin can delete
+
 ### `GET /v1/geo/blocks?bbox=` 👤
 
-Blocks and house counts for building plans on the web, outside a session.
+Blocks (FeatureCollection, properties `{ blockId, houseCount }`) for building plans on the web, outside a session.
 
 ---
 
