@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FeatureCollection, LineString, MultiLineString, MultiPolygon, Point, Polygon } from "geojson";
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 
 // ---------- Primitives ----------
 
@@ -34,11 +34,7 @@ export const DisplayName = z.string().trim().min(1).max(40);
 
 // ---------- GeoJSON (validated loosely; shapes come from PostGIS) ----------
 
-export const PointGeo = z.custom<Point>((v) => isGeo(v, "Point"));
 export const PolygonGeo = z.custom<Polygon | MultiPolygon>((v) => isGeo(v, "Polygon") || isGeo(v, "MultiPolygon"));
-export const LineGeo = z.custom<LineString | MultiLineString>(
-  (v) => isGeo(v, "LineString") || isGeo(v, "MultiLineString"),
-);
 export const FeatureCollectionGeo = z.custom<FeatureCollection>((v) => isGeo(v, "FeatureCollection"));
 
 function isGeo(v: unknown, type: string): boolean {

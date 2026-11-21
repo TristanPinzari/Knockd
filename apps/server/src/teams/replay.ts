@@ -4,19 +4,11 @@
  */
 import { sql } from "drizzle-orm";
 import type { GetTeamSessionRes } from "@knockd/shared";
-import type { FeatureCollection } from "geojson";
 import { db } from "../db/client";
+import { featureCollection } from "../db/sql-helpers";
 import { notFound } from "../http/errors";
 import { getStats } from "../sessions/stats";
 import { listTeamSessions } from "./service";
-
-const featureCollection = async (rows: SQL): Promise<FeatureCollection> => {
-  const [r] = await db.execute<{ fc: FeatureCollection }>(sql`
-    SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(f), '[]'::json)) AS fc
-    FROM (${rows}) x`);
-  return r!.fc;
-};
-type SQL = ReturnType<typeof sql>;
 
 export async function getTeamSession(teamId: string, userId: string, sessionId: string): Promise<GetTeamSessionRes> {
   const [summary] = await listTeamSessions(teamId, userId, { sessionId }); // checks team membership

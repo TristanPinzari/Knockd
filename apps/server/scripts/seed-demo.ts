@@ -14,12 +14,12 @@
  */
 import { randomBytes } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { HIGHLIGHT_COLOURS, type Grade, type SimPace } from "@knockd/shared";
+import { distanceM, HIGHLIGHT_COLOURS, type Grade, type SimPace } from "@knockd/shared";
 import { db, pg } from "../src/db/client";
 import { maps, sessionMembers, sessions, teamInvites, teamMembers, teams, teamSessions, users } from "../src/db/schema";
 import { env } from "../src/env";
 import { processSession } from "../src/jobs/process-session";
-import { distanceM, planRoutes, type Stop } from "../src/sim/routes";
+import { planRoutes, type Stop } from "../src/sim/routes";
 
 const TEAM_NAME = "Knockd Demo";
 const OWNER_SUB = "seed|knockd-demo";

@@ -8,12 +8,12 @@ import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { Bbox, CreateHighlightBody, CreateTeamNoteBody, Highlight, TeamNote } from "@knockd/shared";
 import type { LineString, Polygon } from "geojson";
 import { db } from "../db/client";
+import { envelope } from "../db/sql-helpers";
 import { teamHighlights, teamNotes, users } from "../db/schema";
 import { HttpError, notFound } from "../http/errors";
 import { requireEditor, requireMember } from "./service";
 
 const MAX_RESULTS = 2000;
-const envelope = (b: Bbox) => sql`ST_MakeEnvelope(${b.minLng}, ${b.minLat}, ${b.maxLng}, ${b.maxLat}, 4326)`;
 
 const highlightColumns = {
   id: teamHighlights.id,

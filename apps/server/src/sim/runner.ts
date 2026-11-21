@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import type { Grade, Ping, SimPace } from "@knockd/shared";
+import { distanceM, type Grade, type Ping, type SimPace } from "@knockd/shared";
 import { db } from "../db/client";
 import { sessionMembers, sessions } from "../db/schema";
 import { HttpError } from "../http/errors";
@@ -13,7 +13,7 @@ import { emitToSession, setVirtualPresence } from "../realtime/io";
 import { getPlan } from "../sessions/planning";
 import { addMembers, getMembers } from "../sessions/service";
 import { addLead, addPings } from "../sessions/writes";
-import { distanceM, planRoutes, type Stop } from "./routes";
+import { planRoutes, type Stop } from "./routes";
 
 const BOT_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Riley", "Casey", "Morgan"];
 const WALK_SPEED_MS = 1.3;

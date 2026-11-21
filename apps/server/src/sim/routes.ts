@@ -6,7 +6,7 @@
  * cul-de-sac blocks whose outline is drawn around the houses.
  */
 import { sql } from "drizzle-orm";
-import type { LatLng, PlanContent, SimPace } from "@knockd/shared";
+import { distanceM, type LatLng, type PlanContent, type SimPace } from "@knockd/shared";
 import { db } from "../db/client";
 import { HttpError } from "../http/errors";
 
@@ -181,10 +181,3 @@ function buildRoute(
 }
 
 const angle = (p: LatLng, c: LatLng) => Math.atan2(p.lat - c.lat, p.lng - c.lng);
-
-/** Equirectangular approximation: accurate to well under 1% at neighbourhood scale. */
-export function distanceM(a: LatLng, b: LatLng): number {
-  const dLat = (b.lat - a.lat) * 111_320;
-  const dLng = (b.lng - a.lng) * 111_320 * Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
-  return Math.hypot(dLat, dLng);
-}

@@ -8,6 +8,7 @@ import {
   Bbox,
   csv,
   DisplayName,
+  JoinCode,
   FeatureCollectionGeo,
   Grade,
   GradeCounts,
@@ -88,7 +89,8 @@ export const CreateSessionRes = SessionAccessRes;
 export type CreateSessionRes = SessionAccessRes;
 
 export const JoinSessionBody = z.object({
-  code: z.string().transform((s) => s.trim().toUpperCase()),
+  /** Case-insensitive; surrounding spaces ignored. */
+  code: JoinCode,
   displayName: DisplayName,
 });
 export type JoinSessionBody = z.infer<typeof JoinSessionBody>;

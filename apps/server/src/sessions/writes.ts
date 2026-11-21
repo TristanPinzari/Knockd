@@ -16,6 +16,7 @@ import {
   type TrailsRes,
 } from "@knockd/shared";
 import { db } from "../db/client";
+import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION } from "../db/sql-helpers";
 import { chatMessages, leads, pings, pins, sessionMembers, sessions } from "../db/schema";
 import { HttpError, notFound } from "../http/errors";
 import { emitToSession } from "../realtime/io";
@@ -99,7 +100,8 @@ export async function addLead(sessionId: string, memberId: string, body: PostLea
       .onConflictDoNothing()
       .returning();
   } catch (err) {
-    if (pgCode(err) === "23503") throw new HttpError(400, "invalid_request", `Unknown house ${body.houseId}`);
+    if (pgErrorCode(err) === PG_FOREIGN_KEY_VIOLATION)
+      throw new HttpError(400, "invalid_request", `Unknown house ${body.houseId}`);
     throw err;
   }
 
@@ -247,11 +249,6 @@ async function memberName(memberId: string): Promise<string> {
     .from(sessionMembers)
     .where(eq(sessionMembers.id, memberId));
   return m?.name ?? "Someone";
-}
-
-function pgCode(err: unknown): string | undefined {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e.code ?? e.cause?.code;
 }
 
 // ============================== Trails ==============================
