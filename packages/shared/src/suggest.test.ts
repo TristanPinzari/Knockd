@@ -5,6 +5,7 @@ import { PlanEditOp } from "./socket";
 import {
   crewSplits,
   suggestionToPlanOps,
+  streetPath,
   suggestRoutes,
   type SuggestHouse,
   type SuggestInput,
@@ -132,11 +133,12 @@ describe("suggestRoutes", () => {
     const { streets, houses } = grid(1, 1);
     const oneStreet = houses.filter((h) => h.streetId === 1); // 10 doors, 100 m
     const start = at(0, 0);
-    const [together] = suggest({ streets, houses: oneStreet, memberIds: crew(2), start }).options;
-    expect(together!.mode).toBe("together"); // one street can't be split
-    expect(together!.finishS).toBe(Math.round(100 / 1.3 + (10 * 60) / 2));
-    const [quick] = suggest({ streets, houses: oneStreet, memberIds: crew(2), start, secondsPerDoor: 30 }).options;
-    expect(quick!.finishS).toBe(Math.round(100 / 1.3 + (10 * 30) / 2));
+    const pairOf = (o: { options: { mode: string; finishS: number; groups: unknown[] }[] }) =>
+      o.options.find((x) => x.mode === "together")!;
+    const together = pairOf(suggest({ streets, houses: oneStreet, memberIds: crew(2), start }));
+    expect(together.finishS).toBe(Math.round(100 / 1.3 + (10 * 60) / 2));
+    const quick = pairOf(suggest({ streets, houses: oneStreet, memberIds: crew(2), start, secondsPerDoor: 30 }));
+    expect(quick.finishS).toBe(Math.round(100 / 1.3 + (10 * 30) / 2));
   });
 
   it("walks only as far as the selected doors go, then comes back", () => {
@@ -196,7 +198,9 @@ describe("suggestRoutes", () => {
     });
 
     it("a pair walks the street once, one person per side", () => {
-      const [pair] = suggest({ streets, houses: [...north, ...south], memberIds: crew(2), start: a }).options;
+      const pair = suggest({ streets, houses: [...north, ...south], memberIds: crew(2), start: a }).options.find(
+        (o) => o.mode === "together",
+      );
       const g = pair!.groups[0]!;
       expect(g.memberIds).toHaveLength(2);
       expect(Math.abs(g.walkM - 100)).toBeLessThan(2);
@@ -220,7 +224,9 @@ describe("suggestRoutes", () => {
 
     it("a pair keeps their sides on a two-sided street, even when one side has more doors", () => {
       const fewSouth = south.slice(3, 5); // north 5, south 2
-      const [pair] = suggest({ streets, houses: [...north, ...fewSouth], memberIds: crew(2), start: a }).options;
+      const pair = suggest({ streets, houses: [...north, ...fewSouth], memberIds: crew(2), start: a }).options.find(
+        (o) => o.mode === "together",
+      );
       const g = pair!.groups[0]!;
       const sideOf = (id: number) => (fewSouth.some((h) => h.id === id) ? "S" : "N");
       expect(crossingsBy(g, sideOf)).toEqual([0, 0]);
@@ -237,12 +243,12 @@ describe("suggestRoutes", () => {
         { id: 32, streetId: 1, blockId: 1, ...at(1.15, 0) },
         { id: 33, streetId: 1, blockId: 1, ...at(1.1, -0.1) }, // right
       ];
-      const [pair] = suggest({
+      const pair = suggest({
         streets,
         houses: [...north4, ...south1, ...circle],
         memberIds: crew(2),
         start: a,
-      }).options;
+      }).options.find((o) => o.mode === "together");
       const g = pair!.groups[0]!;
       const south1Rep = g.knocks.find((k) => k.houseId === south1[0]!.id)!.memberId;
       // The person on the south (right) side is 3 behind, so they take the whole circle, from their side round.
@@ -255,8 +261,18 @@ describe("suggestRoutes", () => {
       expect(g.finishS).toBe(Math.round(g.walkM / 1.3 + 4 * 60));
     });
 
+    it("two solos on one two-sided street take a side each, with no zigzag (like a busy road)", () => {
+      const res = suggest({ streets, houses: [...north, ...south], memberIds: crew(2), start: a });
+      const solo = res.options.find((o) => o.mode === "solo")!;
+      const sideOf = (id: number) => (north.some((h) => h.id === id) ? "N" : "S");
+      const sides = solo.groups.map((g) => [...new Set(g.knocks.map((k) => sideOf(k.houseId)))]);
+      expect(sides.map((x) => x.join("")).sort()).toEqual(["N", "S"]);
+    });
+
     it("a pair on a one-sided street leapfrogs: A, B, A, B…", () => {
-      const [pair] = suggest({ streets, houses: north, memberIds: crew(2), start: a }).options;
+      const pair = suggest({ streets, houses: north, memberIds: crew(2), start: a }).options.find(
+        (o) => o.mode === "together",
+      );
       const g = pair!.groups[0]!;
       expect(g.knocks.map((k) => k.houseId)).toEqual(ids(north));
       const who = g.knocks.map((k) => k.memberId);
@@ -304,6 +320,22 @@ describe("suggestRoutes", () => {
     }
   });
 
+  it("pairs solos into buddies (one trio if the crew is odd), each helping their buddy when done", () => {
+    const { streets, houses } = grid(4, 4);
+    const solo = suggest({ streets, houses, memberIds: crew(5), start: at(2, 2) }).options.find(
+      (o) => o.mode === "solo",
+    )!;
+    expect(solo.buddies!.map((team) => team.length).sort()).toEqual([2, 3]);
+    for (const team of solo.buddies!)
+      for (const m of team) {
+        const g = solo.groups.find((x) => x.memberIds[0] === m)!;
+        expect(team).toContain(g.helpAfter!.memberId);
+        expect(g.helpAfter!.memberId).not.toBe(m);
+        const buddy = solo.groups.find((x) => x.memberIds[0] === g.helpAfter!.memberId)!;
+        expect(g.helpAfter!.houseId).toBe(buddy.houseIds[buddy.houseIds.length - 1]);
+      }
+  });
+
   it("reports houses it can't route instead of guessing", () => {
     const { streets, houses } = grid(1, 1);
     const extra: SuggestHouse[] = [
@@ -314,6 +346,23 @@ describe("suggestRoutes", () => {
     expect(res.unroutedHouseIds).toEqual([1, 2]);
     expect(res.options.length).toBeGreaterThan(0);
     expect(suggest({ streets, houses: extra, memberIds: crew(2), start: at(0, 0) }).options).toEqual([]);
+  });
+});
+
+describe("streetPath", () => {
+  it("walks along the streets through the stops in order", () => {
+    const { streets } = grid(2, 2);
+    const path = streetPath(streets, [at(0, -0.1), at(2, 1)]); // snaps to (0,0), then 2 blocks east, 1 north
+    let m = 0;
+    for (let i = 1; i < path.length; i++) m += distanceM(path[i - 1]!, path[i]!);
+    expect(m).toBeCloseTo(300, 0);
+  });
+
+  it("snaps a house onto its own street, even if another street is nearer", () => {
+    const { streets } = grid(2, 2);
+    // 45 m from the street at y = 0 but it belongs to street 3 (y = 1, from x = 0 to 1).
+    const [snapped] = streetPath(streets, [{ ...at(0.5, 0.45), streetId: 3 }]);
+    expect(gridY(snapped!)).toBeCloseTo(1, 3);
   });
 });
 

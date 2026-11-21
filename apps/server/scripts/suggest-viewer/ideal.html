@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Suggest Ideal Plan</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root { --bg: #fafaf7; --panel: #ffffff; --ink: #1f2328; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--ink); background: var(--bg); display: flex; height: 100vh; }
+  #side { width: 360px; flex: none; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--line); padding: 14px; }
+  #map { flex: 1; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  button { font: inherit; border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.make { font-weight: 600; background: var(--accent); border-color: var(--accent); color: #fff; }
+  input[type="number"] { width: 56px; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
+  input[type="range"] { flex: 1; }
+  textarea { width: 100%; font: 12px/1.4 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 7px; padding: 6px; }
+  .member { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 5px; cursor: pointer; }
+  .member.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .chip { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+  .member .grow { flex: 1; font-size: 13px; }
+  .member select { font: inherit; font-size: 12px; }
+  .member button { padding: 1px 6px; font-size: 11px; }
+  .stat { font-size: 12px; color: var(--muted); margin: 6px 0; }
+  .warn { color: #b45309; }
+  table.res { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
+  table.res th, table.res td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.res th:first-child, table.res td:first-child { text-align: left; }
+  table.res tfoot td { font-weight: 600; border-bottom: none; }
+  .vs { font-size: 12px; padding: 6px 8px; border-radius: 8px; background: #f3f4f6; }
+  .better { color: #15803d; font-weight: 600; }
+  .worse { color: #b91c1c; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="side">
+  <h1>Ideal plan</h1>
+  <p class="hint">Your work is saved in this browser (a refresh keeps it; Clear all wipes it). Mark what Suggest <em>should</em> do. Import from the viewer (Copy data there), fix it by hand, then Copy data here and paste both to Claude.</p>
+
+  <div class="row"><button id="reset" title="Clear all houses, assignments, paths, notes and pins (also what's saved in this browser)">Clear all</button></div>
+
+  <h2>1. Start</h2>
+  <textarea id="import" rows="3" placeholder="Paste the viewer's Copy data (or this page's) here"></textarea>
+  <div class="row">
+    <button id="doImport">Import</button>
+    <span class="hint" style="margin:0">Brings in the houses, car, pin, crew, and Suggest's plan for the option you had open.</span>
+  </div>
+
+  <h2>2. Map tool</h2>
+  <div class="row">
+    <button data-mode="assign" class="on">Assign</button>
+    <button data-mode="unassign">Unassign</button>
+    <button data-mode="pan">Pan</button>
+    <button data-mode="meet">Meeting point</button>
+    <button data-mode="car">Move car</button>
+  </div>
+  <div class="row">
+    <button data-mode="select">Select houses</button>
+    <button data-mode="deselect">Deselect</button>
+  </div>
+  <div class="row">
+    <span class="hint" style="margin:0">Brush <span id="rv">20</span> m</span>
+    <input id="radius" type="range" min="5" max="150" value="20" />
+  </div>
+  <p class="hint" id="toolHint"></p>
+
+  <h2>3. Crew</h2>
+  <div class="row">Crew size <input id="crew" type="number" min="1" max="8" value="4" /></div>
+  <div id="members"></div>
+
+  <h2>4. Results</h2>
+  <div class="row">
+    <input id="spd" type="number" min="5" max="600" value="60" /> s/door
+    <input id="cross" type="number" min="0" max="300" value="15" /> s/crossing
+  </div>
+  <div id="results"></div>
+
+  <h2>5. Notes</h2>
+  <textarea id="notes" rows="4" placeholder="What's wrong with Suggest's version, and why yours is better"></textarea>
+
+  <div class="row" style="margin-top:10px">
+    <button id="make" class="make" title="Draw each person's walk along the streets: car, their houses in order, then the meeting point">Make paths</button>
+    <button id="undo">Undo</button>
+    <button id="clearAssign">Clear assignments</button>
+    <button id="copy">Copy data</button>
+  </div>
+  <div class="stat" id="stat"></div>
+</div>
+<div id="map"></div>
+
+<script>/*SHARED*/</script>
+<script>
+const DATA = /*DATA*/;
+const { PALETTE, distanceM, streetPath } = Knockd;
+const STORE = "knockd-suggest-ideal";
+const HINTS = {
+  assign: "Pick a person on the left, then brush over houses in the order they should knock them. Brush along a street and they get it in that order. Houses someone else had move to this person.",
+  unassign: "Brush over houses to take them off whoever had them (they stay selected).",
+  pan: "Drag to move the map.",
+  meet: "Click where everyone should meet at the end.",
+  car: "Click where the car is parked.",
+  select: "Brush to add houses to the selection.",
+  deselect: "Brush to remove houses from the selection (and from whoever had them).",
+};
+const BRUSHES = new Set(["assign", "unassign", "select", "deselect"]);
+
+// ---------- State (saved in this browser so a reload doesn't lose your work) ----------
+let state = {
+  crew: 4,
+  car: { lat: DATA.center.lat - 0.0005, lng: DATA.center.lng },
+  meet: null,
+  selected: [],
+  orders: [[], [], [], []], // per person: house IDs in knock order
+  groupOf: [0, 1, 2, 3], // per person: group number (same number = walk together)
+  paths: [[], [], [], []], // per person: [lng, lat] points (from Make paths)
+  notes: "",
+  imported: null, // the viewer's inputs, passed through for comparison
+  spd: 60,
+  cross: 15,
+  suggestOrders: null, // Suggest's knock order per person, from the import
+};
+const FRESH = JSON.stringify(state);
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE) || "null");
+  if (saved && saved.orders) {
+    state = { ...state, ...saved };
+    state.paths = state.paths.map((p) => p.filter(Boolean)); // older saves had stroke breaks
+  }
+} catch {}
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} };
+
+let mode = "assign";
+let current = 0;
+let radius = 20;
+const history = [];
+const snapshot = () => history.push(JSON.stringify(state));
+const colourOf = (i) => PALETTE[i];
+const memberId = (i) => `P${i + 1}`;
+
+function setCrew(n) {
+  n = Math.max(1, Math.min(8, n));
+  while (state.orders.length < n) { state.orders.push([]); state.paths.push([]); state.groupOf.push(state.orders.length - 1); }
+  state.orders.length = n; state.paths.length = n; state.groupOf.length = n;
+  state.crew = n;
+  current = Math.min(current, n - 1);
+}
+
+// ---------- Map ----------
+const fc = (features) => ({ type: "FeatureCollection", features });
+const pointF = (p, props = {}) => ({ type: "Feature", properties: props, geometry: { type: "Point", coordinates: [p.lng, p.lat] } });
+const map = new maplibregl.Map({
+  container: "map",
+  style: { version: 8, sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#f3f1ec" } }] },
+  center: [DATA.center.lng, DATA.center.lat],
+  zoom: 16.3,
+});
+map.doubleClickZoom.disable();
+const houseById = new Map(DATA.houses.map((h) => [h.id, h]));
+
+function ownerMap() {
+  const owner = new Map();
+  state.orders.forEach((list, m) => list.forEach((id, n) => owner.set(id, { m, n: n + 1 })));
+  return owner;
+}
+
+function icon(id, draw) {
+  if (map.hasImage(id)) return id;
+  const px = 2, size = 26;
+  const c = document.createElement("canvas");
+  c.width = c.height = size * px;
+  const ctx = c.getContext("2d");
+  ctx.scale(px, px);
+  draw(ctx, size);
+  map.addImage(id, ctx.getImageData(0, 0, size * px, size * px), { pixelRatio: px });
+  return id;
+}
+const numberIcon = (n, colour) =>
+  icon(`num-${n}-${colour}`, (ctx, size) => {
+    ctx.beginPath(); ctx.arc(size / 2, size / 2, size / 2 - 3, 0, 2 * Math.PI);
+    ctx.fillStyle = "#ffffff"; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = colour; ctx.stroke();
+    ctx.fillStyle = "#111827";
+    ctx.font = `700 ${n > 99 ? 8 : n > 9 ? 10 : 12}px system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(n), size / 2, size / 2 + 0.5);
+  });
+
+// Houses never change shape: selection and colour are per-house map flags (cheap to update).
+function houseStates() {
+  map.removeFeatureState({ source: "houses" });
+  const owner = ownerMap();
+  for (const id of state.selected) {
+    const o = owner.get(id);
+    map.setFeatureState({ source: "houses", id }, { sel: true, colour: o ? colourOf(o.m) : null });
+  }
+}
+function drawNumbers() {
+  map.getSource("numbers").setData(fc([...ownerMap()].map(([id, o]) => pointF(houseById.get(id), { img: numberIcon(o.n, colourOf(o.m)) }))));
+}
+
+function draw() {
+  if (!map.getSource("houses")) return;
+  houseStates();
+  drawNumbers();
+  map.getSource("paths").setData(fc(state.paths.flatMap((p, m) =>
+    p.length > 1 ? [{ type: "Feature", properties: { colour: colourOf(m) }, geometry: { type: "LineString", coordinates: p } }] : [])));
+  const pts = [pointF(state.car, { kind: "car" })];
+  if (state.meet) pts.push(pointF(state.meet, { kind: "meet" }));
+  map.getSource("points").setData(fc(pts));
+  drawSide();
+  drawResults();
+  save();
+}
+
+map.on("load", () => {
+  map.addSource("streets", { type: "geojson", data: fc(DATA.streets.map((s) => ({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: s.coordinates } }))) });
+  map.addSource("houses", { type: "geojson", promoteId: "id",
+    data: fc(DATA.houses.map((h) => ({ type: "Feature", properties: { id: h.id }, geometry: { type: "Polygon", coordinates: [h.ring] } }))) });
+  map.addSource("paths", { type: "geojson", data: fc([]) });
+  map.addSource("numbers", { type: "geojson", data: fc([]) });
+  map.addSource("points", { type: "geojson", data: fc([]) });
+  map.addSource("brush", { type: "geojson", data: fc([]) });
+  map.addLayer({ id: "streets", type: "line", source: "streets", paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 14, 3, 18, 14] } });
+  map.addLayer({ id: "streets-edge", type: "line", source: "streets", paint: { "line-color": "#cfcac0", "line-width": 1 } }, "streets");
+  map.addLayer({ id: "houses", type: "fill", source: "houses", paint: {
+    "fill-color": ["case", ["boolean", ["feature-state", "sel"], false], ["coalesce", ["feature-state", "colour"], "#60a5fa"], "#d9d5cc"],
+    "fill-outline-color": ["case", ["boolean", ["feature-state", "sel"], false], "#1f2328", "#bdb8ad"] } });
+  map.addLayer({ id: "paths", type: "line", source: "paths", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": ["get", "colour"], "line-width": 4, "line-opacity": 0.85 } });
+  map.addLayer({ id: "numbers", type: "symbol", source: "numbers", minzoom: 15.5,
+    layout: { "icon-image": ["get", "img"], "icon-size": ["interpolate", ["linear"], ["zoom"], 15.5, 0.6, 18, 1], "icon-allow-overlap": true, "icon-ignore-placement": true } });
+  map.addLayer({ id: "brush", type: "fill", source: "brush", paint: { "fill-color": "#2563eb", "fill-opacity": 0.12, "fill-outline-color": "#2563eb" } });
+  map.addLayer({ id: "points", type: "circle", source: "points", paint: {
+    "circle-radius": ["match", ["get", "kind"], "car", 9, "meet", 11, 4],
+    "circle-color": ["match", ["get", "kind"], "car", "#111827", "meet", "rgba(0,0,0,0)", "#888"],
+    "circle-stroke-color": ["match", ["get", "kind"], "meet", "#111827", "#ffffff"],
+    "circle-stroke-width": ["match", ["get", "kind"], "meet", 3, 1.5],
+  } });
+  draw();
+});
+
+// ---------- Snapping a click onto the nearest street ----------
+function snapToStreet(p) {
+  let best = { d: Infinity, at: p };
+  const k = Math.cos((p.lat * Math.PI) / 180);
+  for (const s of DATA.streets) {
+    const c = s.coordinates;
+    for (let i = 1; i < c.length; i++) {
+      const ax = c[i - 1][0] * k, ay = c[i - 1][1], bx = c[i][0] * k, by = c[i][1];
+      const px = p.lng * k, py = p.lat;
+      const dx = bx - ax, dy = by - ay;
+      const t = dx || dy ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy))) : 0;
+      const q = { lng: (ax + t * dx) / k, lat: ay + t * dy };
+      const d = distanceM(p, q);
+      if (d < best.d) best = { d, at: q };
+    }
+  }
+  return best.d < 60 ? best.at : p;
+}
+
+map.on("click", (e) => {
+  const ll = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+  if (mode === "meet") { snapshot(); state.meet = snapToStreet(ll); draw(); }
+  else if (mode === "car") { snapshot(); state.car = snapToStreet(ll); draw(); }
+});
+
+// ---------- Brushes ----------
+const circle = (c, r) => {
+  const pts = [];
+  for (let i = 0; i <= 48; i++) {
+    const a = (i / 48) * 2 * Math.PI;
+    pts.push([c.lng + (r * Math.cos(a)) / (111320 * Math.cos((c.lat * Math.PI) / 180)), c.lat + (r * Math.sin(a)) / 111320]);
+  }
+  return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [pts] } };
+};
+
+let brushing = false;
+let lastAt = null;
+let numbersFrame = 0;
+const numbersSoon = () => { if (!numbersFrame) numbersFrame = requestAnimationFrame(() => { numbersFrame = 0; drawNumbers(); }); };
+
+// Houses under the brush, in the order the brush reaches them (nearest to where it came from first).
+function housesUnder(at) {
+  const from = lastAt ?? at;
+  return DATA.houses
+    .filter((h) => distanceM(at, h) <= radius)
+    .sort((p, q) => distanceM(from, p) - distanceM(from, q));
+}
+
+function brushAt(ll) {
+  const at = { lat: ll.lat, lng: ll.lng };
+  for (const h of housesUnder(at)) {
+    const id = h.id;
+    if (mode === "assign") {
+      if (state.orders[current].includes(id)) continue;
+      state.orders = state.orders.map((list) => list.filter((x) => x !== id));
+      state.orders[current].push(id);
+      if (!state.selected.includes(id)) state.selected.push(id);
+      map.setFeatureState({ source: "houses", id }, { sel: true, colour: colourOf(current) });
+      numbersSoon();
+    } else if (mode === "unassign") {
+      if (!state.orders.some((l) => l.includes(id))) continue;
+      state.orders = state.orders.map((list) => list.filter((x) => x !== id));
+      map.setFeatureState({ source: "houses", id }, { colour: null });
+      numbersSoon();
+    } else if (mode === "select") {
+      if (state.selected.includes(id)) continue;
+      state.selected.push(id);
+      map.setFeatureState({ source: "houses", id }, { sel: true });
+    } else if (mode === "deselect") {
+      if (!state.selected.includes(id)) continue;
+      state.selected = state.selected.filter((x) => x !== id);
+      if (state.orders.some((l) => l.includes(id))) { state.orders = state.orders.map((list) => list.filter((x) => x !== id)); numbersSoon(); }
+      map.setFeatureState({ source: "houses", id }, { sel: false, colour: null });
+    }
+  }
+  lastAt = at;
+}
+
+map.on("mousedown", (e) => {
+  if (!BRUSHES.has(mode)) return;
+  snapshot();
+  brushing = true;
+  lastAt = null;
+  brushAt(e.lngLat);
+});
+map.on("mousemove", (e) => {
+  map.getSource("brush")?.setData(fc(BRUSHES.has(mode) ? [circle(e.lngLat, radius)] : []));
+  if (brushing) brushAt(e.lngLat);
+});
+window.addEventListener("mouseup", () => {
+  if (!brushing) return;
+  brushing = false;
+  draw(); // renumbers everyone (houses taken from someone else shift their numbers)
+});
+
+// ---------- Sidebar ----------
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
+  if (BRUSHES.has(m)) map.dragPan.disable(); else map.dragPan.enable();
+  map.getSource("brush")?.setData(fc([]));
+  document.getElementById("toolHint").textContent = HINTS[m];
+}
+document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+document.getElementById("radius").addEventListener("input", (e) => { radius = Number(e.target.value); document.getElementById("rv").textContent = radius; });
+document.getElementById("crew").addEventListener("change", (e) => { snapshot(); setCrew(Number(e.target.value) || 1); draw(); });
+document.getElementById("spd").addEventListener("change", (e) => { state.spd = Math.max(1, Number(e.target.value) || 60); drawResults(); save(); });
+document.getElementById("cross").addEventListener("change", (e) => { state.cross = Math.max(0, Number(e.target.value) || 0); drawResults(); save(); });
+document.getElementById("notes").addEventListener("input", (e) => { state.notes = e.target.value; save(); });
+document.getElementById("undo").addEventListener("click", () => { if (history.length) { state = JSON.parse(history.pop()); draw(); } });
+document.getElementById("clearAssign").addEventListener("click", () => {
+  snapshot(); state.orders = state.orders.map(() => []); state.paths = state.paths.map(() => []); draw();
+});
+document.getElementById("reset").addEventListener("click", () => {
+  if (!confirm("Clear all houses, assignments, paths, notes and pins?")) return;
+  snapshot(); // Undo can still bring it back
+  state = JSON.parse(FRESH);
+  current = 0;
+  try { localStorage.removeItem(STORE); } catch {}
+  draw();
+});
+document.getElementById("make").addEventListener("click", () => {
+  snapshot();
+  state.paths = state.orders.map((list) => {
+    if (!list.length) return [];
+    const stops = [state.car, ...list.map((id) => houseById.get(id)), ...(state.meet ? [state.meet] : [])];
+    return streetPath(DATA.streets, stops).map((p) => [p.lng, p.lat]);
+  });
+  draw();
+});
+
+// ---------- Measuring a plan ----------
+const streetById = new Map(DATA.streets.map((st) => [st.id, st.coordinates]));
+/** Which side of its street a house is on (0 = left, 1 = right of the street's drawing direction). */
+function sideOf(h) {
+  const c = streetById.get(h.streetId);
+  if (!c) return 0;
+  let best = Infinity, side = 0;
+  const k = Math.cos((h.lat * Math.PI) / 180);
+  for (let i = 1; i < c.length; i++) {
+    const ax = c[i - 1][0] * k, ay = c[i - 1][1], bx = c[i][0] * k, by = c[i][1];
+    const px = h.lng * k, py = h.lat;
+    const dx = bx - ax, dy = by - ay;
+    const t = dx || dy ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy))) : 0;
+    const d = Math.hypot(px - ax - t * dx, py - ay - t * dy);
+    if (d < best) { best = d; side = dx * (py - ay) - dy * (px - ax) > 0 ? 0 : 1; }
+  }
+  return side;
+}
+const pathM = (pts) => pts.reduce((m, p, i) => (i ? m + distanceM(pts[i - 1], p) : 0), 0);
+/** Per person: doors, walking (car → houses in order, along streets), road crossings, done and back-together times. */
+function measure(orders) {
+  const spd = state.spd, cross = state.cross;
+  return orders.map((list) => {
+    if (!list.length) return null;
+    const hs = list.map((id) => houseById.get(id));
+    const walkM = pathM(streetPath(DATA.streets, [state.car, ...hs]));
+    let crossings = 0;
+    for (let i = 1; i < hs.length; i++)
+      if (hs[i].streetId === hs[i - 1].streetId && sideOf(hs[i]) !== sideOf(hs[i - 1])) crossings++;
+    const doneS = walkM / 1.3 + hs.length * spd + crossings * cross;
+    const toMeetM = state.meet ? pathM(streetPath(DATA.streets, [hs[hs.length - 1], state.meet])) : 0;
+    return { doors: hs.length, walkM, crossings, doneS, toMeetM, backS: doneS + toMeetM / 1.3 };
+  });
+}
+const minutes = (sec) => (sec / 60).toFixed(1);
+let suggestCache = { key: "", res: null };
+function drawResults() {
+  const mine = measure(state.orders);
+  const rows = mine.map((r, m) => r
+    ? `<tr><td><span class="chip" style="display:inline-block;width:10px;height:10px;background:${colourOf(m)}"></span> ${memberId(m)}</td>
+        <td>${r.doors}</td><td>${(r.walkM / 1000).toFixed(2)}</td><td>${r.crossings}</td><td>${minutes(r.doneS)}</td><td>${minutes(r.backS)}</td></tr>`
+    : "").join("");
+  const back = (res) => Math.max(0, ...res.filter(Boolean).map((r) => r.backS));
+  const total = (res, k) => res.filter(Boolean).reduce((x, r) => x + r[k], 0);
+  let html = `<table class="res"><thead><tr><th></th><th>doors</th><th>km</th><th>crossings</th><th>done</th><th>back</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td>Everyone back together</td><td>${total(mine, "doors")}</td><td>${(total(mine, "walkM") / 1000).toFixed(2)}</td><td>${total(mine, "crossings")}</td><td></td><td>${minutes(back(mine))}</td></tr></tfoot></table>`;
+  if (state.suggestOrders && state.suggestOrders.some((l) => l.length)) {
+    const key = JSON.stringify([state.suggestOrders, state.car, state.meet, state.spd, state.cross]);
+    if (suggestCache.key !== key) suggestCache = { key, res: measure(state.suggestOrders) };
+    const sug = suggestCache.res;
+    const diff = back(mine) - back(sug);
+    html += `<div class="vs">Suggest's plan, measured the same way: back together <b>${minutes(back(sug))} min</b>,
+      ${(total(sug, "walkM") / 1000).toFixed(2)} km walked, ${total(sug, "crossings")} crossings.<br>
+      Yours is <span class="${diff <= 0 ? "better" : "worse"}">${Math.abs(diff / 60).toFixed(1)} min ${diff <= 0 ? "faster" : "slower"}</span>.</div>`;
+  }
+  html += `<p class="hint" style="margin-top:6px">Times: walking at 1.3 m/s along streets (car → your houses in order), plus the time per door, plus the time per road crossing (two houses in a row on opposite sides of the same street). "Back" adds the walk to the meeting point.</p>`;
+  document.getElementById("results").innerHTML = html;
+  document.getElementById("spd").value = state.spd;
+  document.getElementById("cross").value = state.cross;
+}
+
+function drawSide() {
+  const owner = ownerMap();
+  document.getElementById("crew").value = state.crew;
+  document.getElementById("notes").value = state.notes;
+  const box = document.getElementById("members");
+  box.innerHTML = "";
+  const letters = "ABCDEFGH";
+  state.orders.forEach((list, m) => {
+    const row = document.createElement("div");
+    row.className = "member" + (m === current ? " on" : "");
+    row.innerHTML = `<span class="chip" style="background:${colourOf(m)}"></span>
+      <span class="grow"><b>${memberId(m)}</b> · ${list.length} houses</span>
+      <select title="Who walks together: same group = same letter">${[...Array(state.crew).keys()].map((g) => `<option value="${g}" ${state.groupOf[m] === g ? "selected" : ""}>Group ${letters[g]}</option>`).join("")}</select>
+      <button class="clr" title="Clear this person's houses and path">clear</button>`;
+    row.addEventListener("click", () => { current = m; drawSide(); });
+    row.querySelector("select").addEventListener("click", (e) => e.stopPropagation());
+    row.querySelector("select").addEventListener("change", (e) => { snapshot(); state.groupOf[m] = Number(e.target.value); draw(); });
+    row.querySelector(".clr").addEventListener("click", (e) => { e.stopPropagation(); snapshot(); state.orders[m] = []; state.paths[m] = []; draw(); });
+    box.appendChild(row);
+  });
+  const unassigned = state.selected.filter((id) => !owner.has(id)).length;
+  document.getElementById("stat").innerHTML = `${state.selected.length} houses selected` +
+    (unassigned ? ` · <span class="warn">${unassigned} not assigned yet</span>` : " · all assigned") +
+    (state.meet ? "" : " · no meeting point set");
+}
+
+// ---------- Import / copy ----------
+const ll = (p) => (p ? [Math.round(p.lat * 1e6) / 1e6, Math.round(p.lng * 1e6) / 1e6] : null);
+const fromLL = (a) => (a ? { lat: a[0], lng: a[1] } : null);
+document.getElementById("doImport").addEventListener("click", () => {
+  let j;
+  try { j = JSON.parse(document.getElementById("import").value); } catch { alert("That isn't valid JSON."); return; }
+  snapshot();
+  if (j.kind === "knockd-suggest-ideal") {
+    state = { ...state, ...j.state };
+    state.paths = state.paths.map((p) => p.filter(Boolean));
+  } else if (j.inputs) {
+    const inp = j.inputs;
+    state.selected = [...inp.selectedHouseIds];
+    state.car = fromLL(inp.start) ?? state.car;
+    state.meet = fromLL(inp.regroup);
+    setCrew(inp.crew || 4);
+    state.orders = state.orders.map(() => []);
+    state.paths = state.paths.map(() => []);
+    state.groupOf = state.orders.map((_, m) => m);
+    state.imported = inp;
+    state.spd = inp.secondsPerDoor ?? 60;
+    state.cross = inp.secondsPerCrossing ?? 15;
+    state.suggestOrders = state.orders.map(() => []);
+    // Start from Suggest's plan for the option that was open in the viewer.
+    const opt = (j.options || [])[j.view?.chosenOption ?? 0];
+    if (opt) {
+      if (!state.meet && opt.meet) state.meet = fromLL(opt.meet);
+      opt.groups.forEach((g, gi) => {
+        for (const p of g.members) state.groupOf[Number(p.slice(1)) - 1] = gi;
+        for (const [houseId, p] of g.knocks || []) {
+          state.orders[Number(p.slice(1)) - 1].push(houseId);
+          state.suggestOrders[Number(p.slice(1)) - 1].push(houseId);
+        }
+      });
+      state.notes = state.notes || `Started from Suggest's "${opt.label}".`;
+    }
+  } else { alert("Paste Copy data from the viewer or this page."); return; }
+  document.getElementById("import").value = "";
+  draw();
+});
+
+document.getElementById("copy").addEventListener("click", async (e) => {
+  const owner = ownerMap();
+  const groups = [];
+  state.groupOf.forEach((g, m) => { (groups[g] ||= []).push(memberId(m)); });
+  const out = {
+    kind: "knockd-suggest-ideal",
+    inputs: state.imported ?? { start: ll(state.car), regroup: ll(state.meet), crew: state.crew, selectedHouseIds: [...state.selected].sort((a, b) => a - b) },
+    ideal: {
+      car: ll(state.car),
+      meet: ll(state.meet),
+      groups: groups.filter(Boolean),
+      knocks: Object.fromEntries(state.orders.map((list, m) => [memberId(m), list])),
+      unassigned: state.selected.filter((id) => !owner.has(id)),
+      notes: state.notes,
+    },
+    state: { ...state, paths: state.paths.map(() => []) }, // paths are redrawn with Make paths
+  };
+  const text = JSON.stringify(out);
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  }
+  const b = e.currentTarget;
+  b.textContent = `Copied (${(text.length / 1024).toFixed(0)} KB)`;
+  setTimeout(() => (b.textContent = "Copy data"), 1500);
+});
+
+setCrew(state.crew);
+setMode("assign");
+drawSide();
+</script>
+</body>
+</html>

@@ -1,9 +1,11 @@
 /**
- * Builds the Suggest viewer: a single HTML page that runs the real suggestRoutes from
- * @knockd/shared on London streets and houses around the Byron demo spot. Paint houses, move the
- * car and regroup pin, and see every option's routes, knock order and U-turns.
+ * Builds two self-contained pages (open in a browser, no server needed) with London streets and
+ * houses around the Byron demo spot:
+ *  - docs/suggest-viewer.html: runs the real suggestRoutes from @knockd/shared. Paint houses, move
+ *    the car and regroup pin, and see every option's routes, knock order and U-turns.
+ *  - docs/suggest-ideal.html: mark by hand what Suggest should have done (import the viewer's Copy
+ *    data, then fix who knocks which house in which order), to compare and tune Suggest.
  *
- * Output: docs/suggest-viewer.html (self-contained, open it in a browser, no server needed).
  * Rebuild after changing Suggest: pnpm rebuild:suggest-viewer
  * Needs DATABASE_URL (apps/server/.env) to read the map data.
  */
@@ -14,7 +16,11 @@ import { build } from "esbuild";
 import { pg } from "../../src/db/client";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const OUT = resolve(here, "../../../../docs/suggest-viewer.html");
+const DOCS = resolve(here, "../../../../docs");
+const PAGES = [
+  { template: "template.html", out: "suggest-viewer.html" },
+  { template: "ideal.html", out: "suggest-ideal.html" },
+];
 const SHARED = resolve(here, "../../../../packages/shared/src/index.ts");
 
 // Densest residential spot in Byron (the demo location). Streets a bit wider than houses, so
@@ -69,10 +75,12 @@ const bundle = await build({
   minify: true,
 });
 
-const html = readFileSync(resolve(here, "template.html"), "utf8")
-  .replace("/*SHARED*/", () => bundle.outputFiles[0]!.text)
-  .replace("/*DATA*/", () => JSON.stringify(data));
-writeFileSync(OUT, html);
-console.log(
-  `${OUT}\n${data.streets.length} streets, ${data.houses.length} houses, ${(html.length / 1e6).toFixed(1)} MB`,
-);
+for (const page of PAGES) {
+  const html = readFileSync(resolve(here, page.template), "utf8")
+    .replace("/*SHARED*/", () => bundle.outputFiles[0]!.text)
+    .replace("/*DATA*/", () => JSON.stringify(data));
+  const out = resolve(DOCS, page.out);
+  writeFileSync(out, html);
+  console.log(`${out} (${(html.length / 1e6).toFixed(1)} MB)`);
+}
+console.log(`${data.streets.length} streets, ${data.houses.length} houses`);

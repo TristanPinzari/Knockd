@@ -76,6 +76,12 @@ export interface SuggestInput {
   walkSpeedMs?: number;
   /** For shuffling who's in which group (default Math.random). Groups are easy to swap in the UI. */
   random?: () => number;
+  /**
+   * Which planner: "slices" cuts the streets into slices, then routes each; "grow" grows everyone's
+   * line from the car door by door, then balances the lines. "best" (default) runs both for every
+   * way of splitting the crew and keeps whichever gets everyone back together sooner.
+   */
+  method?: "best" | "slices" | "grow";
 }
 
 /** One door for one person. */
@@ -106,6 +112,8 @@ export interface SuggestGroup {
   end: LatLng;
   /** The walk from `end` to the meeting point, along streets (just [end] if they finish there). */
   toMeet: LatLng[];
+  /** Solo plans: when done, go to this buddy's last house and work back towards them. */
+  helpAfter?: { memberId: string; houseId: number };
 }
 
 export interface SuggestOption {
@@ -118,6 +126,8 @@ export interface SuggestOption {
   /** Seconds until everyone has finished and walked to the meeting point. The ranking score. */
   togetherS: number;
   meetPoint: LatLng;
+  /** Solo plans: buddies whose lines end near each other (pairs, plus a trio if the crew is odd). */
+  buddies?: string[][];
 }
 
 export interface SuggestResult {
@@ -241,10 +251,13 @@ class Graph {
    * Snaps points (the car, the regroup pin) onto the nearest street, anywhere along it, and adds
    * them to the network so walking starts and ends exactly there. Call before any routing.
    */
-  snap(points: LatLng[]): { node: number; at: LatLng }[] {
+  snap(points: (LatLng & { streetId?: number | null })[]): { node: number; at: LatLng }[] {
     const streets = this.edges.length;
     const hits = points.map((p) => {
       let best = { dist: Infinity, e: -1, along: 0 };
+      // A point that knows its street (a house) snaps onto that street.
+      const own = p.streetId == null ? undefined : this.edgeOfStreet.get(p.streetId);
+      if (own !== undefined) return { dist: 0, e: own, along: placeOnLine(this.edges[own]!.coords, p).along };
       for (let e = 0; e < streets; e++) {
         const { along, dist } = placeOnLine(this.edges[e]!.coords, p);
         if (dist < best.dist) best = { dist, e, along };
@@ -276,6 +289,17 @@ class Graph {
       if (prev !== edge.a) this.connect(prev, edge.b, subLine(edge.coords, prevAlong, edge.len));
     }
     return out.map(({ node, at }) => ({ node, at: { lat: at.lat, lng: at.lng } }));
+  }
+
+  /** The nearest real street to a point, and how far along it the point is (no change to the network). */
+  locate(p: LatLng): { e: number; along: number } {
+    let best = { dist: Infinity, e: -1, along: 0 };
+    for (let e = 0; e < this.edges.length; e++) {
+      if (this.edges[e]!.street === -1) continue;
+      const { along, dist } = placeOnLine(this.edges[e]!.coords, p);
+      if (dist < best.dist) best = { dist, e, along };
+    }
+    return { e: best.e, along: best.along };
   }
 
   /** A walkable piece of street that isn't a street of its own (from snapping). */
@@ -467,6 +491,14 @@ interface Door {
   house: SuggestHouse;
   along: number;
   side: 0 | 1;
+}
+/** Doors on one street, in the order they're walked (fromA: walking from the street's a end towards b). */
+interface Run {
+  e: number;
+  fromA: boolean;
+  doors: Door[];
+  /** A solo's out-and-back: one side going out, the other coming back. */
+  outAndBack?: boolean;
 }
 /** A street's selected doors (sorted by `along`), where they start and end, and how often they swap sides. */
 interface Span {
@@ -847,7 +879,18 @@ export function suggestRoutes(input: SuggestInput): SuggestResult {
    *    end in one unbroken run, the run sizes evening out everyone's totals.
    * People in a group aren't tied together: whoever has fewer doors simply gets ahead.
    */
-  const knockOrder = (seq: Step[], memberIds: string[]): SuggestKnock[] => {
+  const knockOrder = (seq: Step[], memberIds: string[]): SuggestKnock[] =>
+    knockOrderRuns(
+      seq.map((st) => {
+        const fromA = st.k === 0 || st.k === 2;
+        const doors = spans.get(st.e)!.doors;
+        return { e: st.e, fromA, doors: fromA ? doors : [...doors].reverse(), outAndBack: st.k >= 2 };
+      }),
+      memberIds,
+    );
+
+  /** The same rules on runs: doors on one street, in walking order (see knockOrder). */
+  const knockOrderRuns = (runs: Run[], memberIds: string[]): SuggestKnock[] => {
     const out: SuggestKnock[] = [];
     const count = new Map(memberIds.map((m) => [m, 0]));
     const fewest = (ms: string[]) => ms.reduce((p, q) => (count.get(q)! < count.get(p)! ? q : p));
@@ -859,14 +902,14 @@ export function suggestRoutes(input: SuggestInput): SuggestResult {
     const leftTeam = memberIds.slice(0, half);
     const rightTeam = memberIds.slice(half);
 
-    for (const st of seq) {
-      const edge = g.edges[st.e]!;
-      const span = spans.get(st.e)!;
-      const fromA = st.k === 0 || st.k === 2;
-      const inWalkOrder = fromA ? span.doors : [...span.doors].reverse();
+    for (const run of runs) {
+      const edge = g.edges[run.e]!;
+      const { fromA } = run;
+      const inWalkOrder = run.doors;
       if (memberIds.length === 1) {
+        const twoSided = inWalkOrder.some((d) => d.side === 0) && inWalkOrder.some((d) => d.side === 1);
         const doors =
-          st.k >= 2 && span.twoSided
+          run.outAndBack && twoSided
             ? [...inWalkOrder.filter((d) => d.side === 0), ...inWalkOrder.filter((d) => d.side === 1).reverse()]
             : inWalkOrder;
         for (const d of doors) give(d, memberIds[0]!);
@@ -917,9 +960,351 @@ export function suggestRoutes(input: SuggestInput): SuggestResult {
     return Math.max(...counts.values());
   };
 
-  const options: SuggestOption[] = [];
-  for (const split of crewSplits(crew.length)) {
-    if (split.sizes.length > required.length) continue; // more groups than streets to give them
+  // ============================== Grow, then balance ==============================
+  //
+  // 1. Grow: everyone leaves the car towards their own slice. Whoever is free next takes the
+  //    nearest unclaimed door, preferring to carry on the way they're going on the side they're
+  //    on. A solo only crosses the road when their side runs out (so they come back up the other
+  //    side). A house goes to whoever gets there first, so lines stay continuous and everyone
+  //    picks up what's on their way.
+  // 2. Balance: whoever is last back together gives the door at an end of their line to the
+  //    neighbour who can take it most cheaply. Repeat while it gets everyone back sooner.
+
+  /** A spot on a street: metres from its `a` end. */
+  interface Spot {
+    e: number;
+    along: number;
+  }
+  /** A door that knows its street. */
+  interface GDoor extends Door {
+    e: number;
+  }
+  const gdoors: GDoor[] = required.flatMap((e) => spans.get(e)!.doors.map((d) => ({ ...d, e })));
+  const carSpot: Spot = g.locate(input.start);
+
+  const ends = (s: Spot): [number, number][] => {
+    const ed = g.edges[s.e]!;
+    return [
+      [ed.a, s.along],
+      [ed.b, ed.len - s.along],
+    ];
+  };
+  /** Walking metres between spots, and whether `q` is reached from its street's a end. */
+  const between = (p: Spot, q: Spot): { m: number; viaA: boolean; u: number; w: number } => {
+    if (p.e === q.e) return { m: Math.abs(p.along - q.along), viaA: q.along >= p.along, u: -1, w: -1 };
+    let best = { m: Infinity, viaA: true, u: -1, w: -1 };
+    for (const [u, du] of ends(p))
+      ends(q).forEach(([w, dw], i) => {
+        const m = du + g.dist(u, w) + dw;
+        if (m < best.m) best = { m, viaA: i === 0, u, w };
+      });
+    return best;
+  };
+  const toNode = (p: Spot, node: number) => Math.min(...ends(p).map(([u, du]) => du + g.dist(u, node)));
+
+  /** Choosing the next door: crossing mid-street and turning back are discouraged (metres). */
+  const CHOICE_CROSS_M = 60;
+  const CHOICE_TURN_BACK_M = 40;
+  const CHOICE_OUTSIDE_SLICE_M = 150;
+  /** Taking doors on a street side someone else is already working (keeps one person per side). */
+  const CHOICE_NIBBLE_M = 100;
+
+  /** Grid cells for the nearby-door search (metres). */
+  const CELL_M = 60;
+  const cellKey = (cx: number, cy: number) => (cx + 50_000) * 100_000 + (cy + 50_000);
+  const spotXY = (s: Spot) => g.project(cutAt(g.edges[s.e]!.coords, s.along).pop()!);
+  const doorXY = gdoors.map(spotXY);
+  const doorCell = doorXY.map((p) => ({ cx: Math.floor(p.x / CELL_M), cy: Math.floor(p.y / CELL_M) }));
+  const carXY = spotXY(carSpot);
+
+  /** Doors in walking order for each group, grown from the car. */
+  const grow = (slices: number[][], sizes: number[]): GDoor[][] => {
+    const home = slices.map((es) => new Set(es));
+    const walkers = sizes.map((size, j) => ({
+      j,
+      size,
+      t: 0,
+      pos: carSpot as Spot,
+      side: -1,
+      dir: 0,
+      seq: [] as GDoor[],
+    }));
+    // Doors in a grid of cells, so each step looks at nearby doors first. Walking distance is never
+    // shorter than the straight line, so once the next ring of cells is further away (in a straight
+    // line) than the best door found so far, nothing further out can win.
+    const alive = new Uint8Array(gdoors.length).fill(1);
+    let leftCount = gdoors.length;
+    const grid = new Map<number, number[]>();
+    let minC = Infinity;
+    let maxC = -Infinity;
+    gdoors.forEach((_, i) => {
+      const { cx, cy } = doorCell[i]!;
+      const key = cellKey(cx, cy);
+      grid.set(key, [...(grid.get(key) ?? []), i]);
+      minC = Math.min(minC, cx, cy);
+      maxC = Math.max(maxC, cx, cy);
+    });
+    /** Who first took doors on each street side ("edge:side"). */
+    const sideOwner = new Map<string, number>();
+    const posXY = new Map<(typeof walkers)[number], { x: number; y: number }>(walkers.map((w) => [w, carXY]));
+    while (leftCount) {
+      const w = walkers.reduce((p, q) => (q.t < p.t ? q : p));
+      let best: { d: GDoor; i: number; score: number; m: number; viaA: boolean } | null = null;
+      const here = posXY.get(w)!;
+      const cx = Math.floor(here.x / CELL_M);
+      const cy = Math.floor(here.y / CELL_M);
+      const maxRing = Math.max(Math.abs(cx - minC), Math.abs(cx - maxC), Math.abs(cy - minC), Math.abs(cy - maxC)) + 1;
+      const candidates: number[] = [];
+      for (let r = 0; r <= maxRing; r++) {
+        if (best && (r - 1) * CELL_M > best.score) break;
+        candidates.length = 0;
+        for (let dx = -r; dx <= r; dx++)
+          for (let dy = -r; dy <= r; dy++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            for (const i of grid.get(cellKey(cx + dx, cy + dy)) ?? []) if (alive[i]) candidates.push(i);
+          }
+        for (const i of candidates) {
+          const d = gdoors[i]!;
+          const { m, viaA } = between(w.pos, d);
+          let score = m;
+          if (w.size === 1 && d.e === w.pos.e && w.side >= 0 && d.side !== w.side) score += CHOICE_CROSS_M;
+          if (
+            d.e === w.pos.e &&
+            w.dir !== 0 &&
+            Math.abs(d.along - w.pos.along) > 1 &&
+            Math.sign(d.along - w.pos.along) === -w.dir
+          )
+            score += CHOICE_TURN_BACK_M;
+          const mine = home[w.j]; // fewer streets than people: some have no slice, so no preference
+          if (mine && !mine.has(d.e)) score += CHOICE_OUTSIDE_SLICE_M;
+          const owner = sideOwner.get(`${d.e}:${d.side}`);
+          if (owner !== undefined && owner !== w.j) score += CHOICE_NIBBLE_M;
+          if (!best || score < best.score) best = { d, i, score, m, viaA };
+        }
+      }
+      const { d, i: picked, m, viaA } = best!;
+      alive[picked] = 0;
+      if (!sideOwner.has(`${d.e}:${d.side}`)) sideOwner.set(`${d.e}:${d.side}`, w.j);
+      leftCount--;
+      posXY.set(w, doorXY[picked]!);
+      const crossed = w.size === 1 && d.e === w.pos.e && w.side >= 0 && d.side !== w.side;
+      w.t += m / v + (crossed ? crossS : 0) + spd / w.size;
+      w.dir =
+        d.e === w.pos.e
+          ? Math.abs(d.along - w.pos.along) > 1
+            ? Math.sign(d.along - w.pos.along)
+            : w.dir
+          : viaA
+            ? 1
+            : -1;
+      w.pos = d;
+      w.side = d.side;
+      w.seq.push(d);
+    }
+    return walkers.map((w) => w.seq);
+  };
+
+  /** Consecutive doors on the same street, as runs (for the knock-order rules and street lists). */
+  const runsOf = (seq: GDoor[]): Run[] => {
+    const runs: Run[] = [];
+    for (const d of seq) {
+      const last = runs[runs.length - 1];
+      if (last && last.e === d.e) last.doors.push(d);
+      else runs.push({ e: d.e, fromA: true, doors: [d] });
+    }
+    for (const r of runs) if (r.doors.length > 1) r.fromA = r.doors[r.doors.length - 1]!.along >= r.doors[0]!.along;
+    return runs;
+  };
+
+  interface Timed {
+    walkM: number;
+    finishS: number;
+  }
+  const timeOf = (seq: GDoor[], size: number): Timed => {
+    let walkM = 0;
+    let crossings = 0;
+    let pos: Spot = carSpot;
+    for (const d of seq) {
+      walkM += between(pos, d).m;
+      if (size === 1 && pos !== carSpot && (pos as GDoor).e === d.e && (pos as GDoor).side !== d.side) crossings++;
+      pos = d;
+    }
+    let busiest = seq.length;
+    if (size > 1) {
+      const ids = Array.from({ length: size }, (_, i) => String(i));
+      const counts = new Map<string, number>();
+      for (const k of knockOrderRuns(runsOf(seq), ids)) counts.set(k.memberId, (counts.get(k.memberId) ?? 0) + 1);
+      busiest = Math.max(...counts.values());
+    }
+    return { walkM, finishS: walkM / v + busiest * spd + crossings * crossS };
+  };
+
+  /** Where to meet (the pin, or the node that gets everyone together soonest) and when. */
+  const meetOf = (seqs: GDoor[][], times: Timed[]) => {
+    const at = (node: number) =>
+      Math.max(...seqs.map((seq, j) => times[j]!.finishS + toNode(seq[seq.length - 1] ?? carSpot, node) / v));
+    if (pin) return { meet: pin.node, togetherS: at(pin.node) };
+    let meet = car.node;
+    let best = Infinity;
+    for (let node = 0; node < g.nodes.length; node++) {
+      const t = at(node);
+      if (t < best) [best, meet] = [t, node];
+    }
+    return { meet, togetherS: best };
+  };
+
+  /** Walking metres added by putting door `d` at position `i` of `seq`. */
+  const insertCost = (seq: GDoor[], i: number, d: GDoor) => {
+    const prev: Spot = i === 0 ? carSpot : seq[i - 1]!;
+    const next = seq[i];
+    return next ? between(prev, d).m + between(d, next).m - between(prev, next).m : between(prev, d).m;
+  };
+
+  const balance = (start: GDoor[][], sizes: number[]) => {
+    const seqs = start.map((s) => [...s]);
+    let times = seqs.map((s, j) => timeOf(s, sizes[j]!));
+    let { meet, togetherS } = meetOf(seqs, times);
+    const backOf = (j: number) => times[j]!.finishS + toNode(seqs[j]![seqs[j]!.length - 1] ?? carSpot, meet) / v;
+    for (let round = 0; round < 400; round++) {
+      const backs = seqs.map((_, j) => backOf(j));
+      const last = backs.indexOf(Math.max(...backs));
+      const from = seqs[last]!;
+      if (from.length < 2) break;
+      let bestMove: { seqs: GDoor[][]; times: Timed[]; togetherS: number; meet: number } | null = null;
+      for (const at of [from.length - 1, 0]) {
+        const d = from[at]!;
+        for (let to = 0; to < seqs.length; to++) {
+          if (to === last) continue;
+          const target = seqs[to]!;
+          let pos = 0;
+          let cost = Infinity;
+          for (let i = 0; i <= target.length; i++) {
+            const c = insertCost(target, i, d);
+            if (c < cost) [cost, pos] = [c, i];
+          }
+          const trial = seqs.map((s) => [...s]);
+          trial[last] = from.filter((_, i) => i !== at);
+          trial[to]!.splice(pos, 0, d);
+          const trialTimes = trial.map((s, j) => (j === last || j === to ? timeOf(s, sizes[j]!) : times[j]!));
+          const m = meetOf(trial, trialTimes);
+          if (m.togetherS < (bestMove?.togetherS ?? togetherS) - 1)
+            bestMove = { seqs: trial, times: trialTimes, togetherS: m.togetherS, meet: m.meet };
+        }
+      }
+      if (!bestMove) break;
+      seqs.splice(0, seqs.length, ...bestMove.seqs);
+      times = bestMove.times;
+      togetherS = bestMove.togetherS;
+      meet = bestMove.meet;
+    }
+    return { seqs, times, meet, togetherS };
+  };
+
+  /** Points along the streets between two spots (excluding the first spot's own point). */
+  const piece = (e: number, from: number, to: number): LatLng[] => {
+    const coords = g.edges[e]!.coords;
+    return from <= to ? subLine(coords, from, to) : subLine(coords, to, from).reverse();
+  };
+  const pointOn = (s: Spot) => cutAt(g.edges[s.e]!.coords, s.along).pop()!;
+  const pathBetween = (p: Spot, q: Spot): LatLng[] => {
+    const b = between(p, q);
+    if (p.e === q.e) return piece(p.e, p.along, q.along);
+    const ep = g.edges[p.e]!;
+    const eq = g.edges[q.e]!;
+    return [
+      ...piece(p.e, p.along, b.u === ep.a ? 0 : ep.len),
+      ...g.path(b.u, b.w),
+      ...piece(q.e, b.w === eq.a ? 0 : eq.len, q.along),
+    ];
+  };
+  const pathToNode = (p: Spot, node: number): LatLng[] => {
+    const ed = g.edges[p.e]!;
+    const viaA = p.along + g.dist(ed.a, node) <= ed.len - p.along + g.dist(ed.b, node);
+    return [...piece(p.e, p.along, viaA ? 0 : ed.len), ...g.path(viaA ? ed.a : ed.b, node)];
+  };
+  const dedupe = (pts: LatLng[]) =>
+    pts
+      .map((p) => ({ lat: p.lat, lng: p.lng }))
+      .filter((p, i, all) => i === 0 || p.lat !== all[i - 1]!.lat || p.lng !== all[i - 1]!.lng);
+
+  /** The grow-then-balance plan for one way of splitting the crew, as Suggest groups. */
+  const growPlan = (split: CrewSplit) => {
+    const starts = split.sizes.length === 1 ? [0] : sliceStarts.slice(0, 6);
+    // Solos don't trade doors (that sends people onto other blocks): they keep the line they grew
+    // and help their buddy when they're done, so variants are compared on help-aware times.
+    const solos = split.mode === "solo" && split.sizes.length > 1;
+    let best: (ReturnType<typeof balance> & { score: number }) | null = null;
+    for (const s of starts) {
+      const slices = slice([...sorted.slice(s), ...sorted.slice(0, s)], split.sizes);
+      const grown = grow(slices, split.sizes);
+      let planned: ReturnType<typeof balance>;
+      if (solos) {
+        const times = grown.map((seq, j) => timeOf(seq, split.sizes[j]!));
+        planned = { seqs: grown, times, ...meetOf(grown, times) };
+      } else planned = balance(grown, split.sizes);
+      const score = solos ? withHelp(planned.seqs, planned.meet).togetherS : planned.togetherS;
+      if (!best || score < best.score) best = { ...planned, score };
+    }
+    return best!;
+  };
+  const growGroups = (plan: ReturnType<typeof balance>, split: CrewSplit): SuggestGroup[] => {
+    let taken = 0;
+    return plan.seqs.map((seq, j) => {
+      const memberIds = crew.slice(taken, taken + split.sizes[j]!);
+      taken += split.sizes[j]!;
+      const route = [car.at];
+      let pos: Spot = carSpot;
+      route.push(pointOn(carSpot));
+      for (const d of seq) {
+        route.push(...pathBetween(pos, d));
+        pos = d;
+      }
+      const clean = dedupe(route);
+      const end = clean[clean.length - 1]!;
+      const runs = runsOf(seq);
+      const houses = seq.map((d) => d.house);
+      return {
+        memberIds,
+        houseIds: houses.map((h) => h.id),
+        knocks:
+          memberIds.length === 1
+            ? houses.map((h) => ({ houseId: h.id, memberId: memberIds[0]! }))
+            : knockOrderRuns(runs, memberIds),
+        blockIds: [...new Set(houses.flatMap((h) => (h.blockId === null ? [] : [h.blockId])))],
+        streetIds: [...new Set(runs.map((r) => g.edges[r.e]!.street))],
+        doors: houses.length,
+        route: clean,
+        walkM: Math.round(plan.times[j]!.walkM),
+        finishS: Math.round(plan.times[j]!.finishS),
+        end,
+        toMeet: dedupe([end, ...(seq.length ? pathToNode(pos, plan.meet) : [])]),
+      };
+    });
+  };
+
+  /** Each option's meeting node (to measure help-aware times). */
+  const meetNodeOf = new WeakMap<SuggestOption, number>();
+
+  /** The grow-then-balance option for one way of splitting the crew. */
+  const growOption = (split: CrewSplit): SuggestOption | null => {
+    if (split.sizes.length > gdoors.length) return null;
+    const plan = growPlan(split);
+    const meetNode = g.nodes[plan.meet]!;
+    const option: SuggestOption = {
+      mode: split.mode,
+      label: split.label,
+      groups: growGroups(plan, split),
+      finishS: Math.round(Math.max(...plan.times.map((t) => t.finishS))),
+      togetherS: Math.round(plan.togetherS),
+      meetPoint: pin ? pin.at : { lat: meetNode.lat, lng: meetNode.lng },
+    };
+    meetNodeOf.set(option, plan.meet);
+    return option;
+  };
+
+  /** The slices option for one way of splitting the crew. */
+  const slicesOption = (split: CrewSplit): SuggestOption | null => {
+    if (split.sizes.length > required.length) return null; // more groups than streets to give them
     let best: Planned | null = null;
     for (const s of split.sizes.length === 1 ? [0] : sliceStarts) {
       const planned = plan(slice([...sorted.slice(s), ...sorted.slice(0, s)], split.sizes), split.sizes);
@@ -949,18 +1334,164 @@ export function suggestRoutes(input: SuggestInput): SuggestResult {
       };
     });
     const meetNode = g.nodes[chosen.meet]!;
-    options.push({
+    const option: SuggestOption = {
       mode: split.mode,
       label: split.label,
       groups,
       finishS: Math.round(Math.max(...chosen.finishS)),
       togetherS: Math.round(chosen.togetherS),
       meetPoint: pin ? pin.at : { lat: meetNode.lat, lng: meetNode.lng },
-    });
+    };
+    meetNodeOf.set(option, chosen.meet);
+    return option;
+  };
+
+  // ============================== Buddies (help rule) ==============================
+  //
+  // Solos are paired with the person whose line ends nearest theirs (plus one trio if the crew is
+  // odd). The rule is easy to follow if someone gets held up in a long conversation: when you're
+  // done, go to your buddy's last house and work back towards them.
+
+  const doorIndex = new Map(gdoors.map((d, i) => [d, i]));
+  const doorOfHouse = new Map(gdoors.map((d) => [d.house.id, d]));
+
+  /** Seconds at which each door of a solo line is done (walking from the car, doors, crossings). */
+  const doneTimes = (seq: GDoor[]) => {
+    const out: number[] = [];
+    let t = 0;
+    let pos: Spot = carSpot;
+    let prev: GDoor | null = null;
+    for (const d of seq) {
+      t += between(pos, d).m / v + spd + (prev && prev.e === d.e && prev.side !== d.side ? crossS : 0);
+      out.push(t);
+      pos = prev = d;
+    }
+    return out;
+  };
+
+  /**
+   * Buddies and help-aware timing for solo lines. Buddies: the closest line ends first, the leftover
+   * person joining the nearest pair (a trio). When someone finishes, they walk to their buddy's
+   * last house and knock backwards while the buddy carries on forwards, until they meet. In a trio,
+   * the first one done helps the last.
+   */
+  const withHelp = (seqs: GDoor[][], meet: number) => {
+    const people = seqs.map((seq, i) => ({
+      i,
+      end: seq.length ? doorXY[doorIndex.get(seq[seq.length - 1]!)!]! : carXY,
+    }));
+    const dist = (p: number, q: number) => xyDist(people[p]!.end, people[q]!.end);
+    const free = new Set(people.map((p) => p.i));
+    const teams: number[][] = [];
+    while (free.size >= 2) {
+      let pair: [number, number] = [-1, -1];
+      let best = Infinity;
+      for (const p of free) for (const q of free) if (p < q && dist(p, q) < best) [best, pair] = [dist(p, q), [p, q]];
+      teams.push(pair);
+      free.delete(pair[0]);
+      free.delete(pair[1]);
+    }
+    for (const odd of free) {
+      if (!teams.length) teams.push([odd]);
+      else
+        teams
+          .reduce((t, u) => (Math.min(...u.map((x) => dist(x, odd))) < Math.min(...t.map((x) => dist(x, odd))) ? u : t))
+          .push(odd);
+    }
+    const times = seqs.map(doneTimes);
+    const doneAt = (p: number) => times[p]![times[p]!.length - 1] ?? 0;
+    const backAlone = (p: number) =>
+      doneAt(p) + (seqs[p]!.length ? toNode(seqs[p]![seqs[p]!.length - 1]!, meet) / v : 0);
+    /** `fast` finishes, then works `slow`'s line backwards from its last house until they meet. */
+    const helped = (fast: number, slow: number) => {
+      const line = seqs[slow]!;
+      const n = line.length;
+      if (!n || !seqs[fast]!.length) return Math.max(backAlone(fast), backAlone(slow));
+      const helper: number[] = Array(n).fill(0); // when the helper finishes door i (going backwards)
+      helper[n - 1] = doneAt(fast) + between(seqs[fast]![seqs[fast]!.length - 1]!, line[n - 1]!).m / v + spd;
+      for (let i = n - 2; i >= 0; i--)
+        helper[i] =
+          helper[i + 1]! +
+          between(line[i + 1]!, line[i]!).m / v +
+          spd +
+          (line[i]!.e === line[i + 1]!.e && line[i]!.side !== line[i + 1]!.side ? crossS : 0);
+      let best = Math.max(backAlone(fast), backAlone(slow)); // no help at all
+      for (let j = 0; j < n - 1; j++) {
+        // The buddy does 0..j, the helper does j+1..n-1; both then walk to the meeting point.
+        const t = Math.max(
+          times[slow]![j]! + toNode(line[j]!, meet) / v,
+          helper[j + 1]! + toNode(line[j + 1]!, meet) / v,
+        );
+        best = Math.min(best, t);
+      }
+      return best;
+    };
+    let togetherS = 0;
+    for (const team of teams) {
+      if (team.length === 1) {
+        togetherS = Math.max(togetherS, backAlone(team[0]!));
+        continue;
+      }
+      const byDone = [...team].sort((p, q) => doneAt(p) - doneAt(q));
+      const rest = byDone.slice(1, -1).map(backAlone);
+      togetherS = Math.max(togetherS, helped(byDone[0]!, byDone[byDone.length - 1]!), ...rest);
+    }
+    return { teams, togetherS };
+  };
+
+  /** Solo options: buddies, the help rule, and "back together" counting help. */
+  const addBuddies = (option: SuggestOption): SuggestOption => {
+    if (option.mode !== "solo" || option.groups.length < 2) return option;
+    const seqs = option.groups.map((gr) => gr.knocks.map((k) => doorOfHouse.get(k.houseId)!));
+    const { teams, togetherS } = withHelp(seqs, meetNodeOf.get(option) ?? car.node);
+    for (const team of teams)
+      team.forEach((p, k) => {
+        if (team.length < 2) return;
+        const buddy = option.groups[team[(k + 1) % team.length]!]!;
+        option.groups[p]!.helpAfter = {
+          memberId: buddy.memberIds[0]!,
+          houseId: buddy.houseIds[buddy.houseIds.length - 1]!,
+        };
+      });
+    option.buddies = teams.map((team) => team.map((p) => option.groups[p]!.memberIds[0]!));
+    option.togetherS = Math.round(togetherS);
+    return option;
+  };
+  const xyDist = (p: { x: number; y: number }, q: { x: number; y: number }) => Math.hypot(p.x - q.x, p.y - q.y);
+
+  // Both planners for each way of splitting the crew, keeping whichever gets everyone back sooner.
+  const method = input.method ?? "best";
+  const options: SuggestOption[] = [];
+  for (const split of crewSplits(crew.length)) {
+    const tried = [method !== "grow" ? slicesOption(split) : null, method !== "slices" ? growOption(split) : null]
+      .filter((o): o is SuggestOption => !!o)
+      .map(addBuddies);
+    const best = tried.reduce<SuggestOption | null>((p, q) => (!p || q.togetherS < p.togetherS ? q : p), null);
+    if (best) options.push(best);
   }
 
   options.sort((p, q) => p.togetherS - q.togetherS);
   return { options, unroutedHouseIds, start: car.at, regroup: pin?.at ?? null };
+}
+
+// ============================== Walking path through stops ==============================
+
+/**
+ * The walking path along streets through `stops` in order (e.g. the car, then houses, then the
+ * meeting point). Each stop snaps onto the nearest street, or onto its own street if it has a
+ * `streetId` (houses). Used to draw a hand-made plan the same way Suggest draws its routes.
+ */
+export function streetPath(streets: SuggestStreet[], stops: (LatLng & { streetId?: number | null })[]): LatLng[] {
+  if (!stops.length) return [];
+  const g = new Graph(stops[0]!);
+  for (const s of streets) g.addStreet(s);
+  if (!g.edges.length) return stops.map((p) => ({ lat: p.lat, lng: p.lng }));
+  const snapped = g.snap(stops);
+  const out: LatLng[] = [snapped[0]!.at];
+  for (let i = 1; i < snapped.length; i++) out.push(...g.path(snapped[i - 1]!.node, snapped[i]!.node));
+  return out
+    .map((p) => ({ lat: p.lat, lng: p.lng }))
+    .filter((p, i, all) => i === 0 || p.lat !== all[i - 1]!.lat || p.lng !== all[i - 1]!.lng);
 }
 
 // ============================== Applying a suggestion ==============================

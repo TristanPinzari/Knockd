@@ -21,7 +21,8 @@
     "data:import": "tsx scripts/london/import.ts",
     "data:census": "tsx scripts/london/census.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "suggest:viewer": "tsx scripts/suggest-viewer/build.ts"
+    "suggest:viewer": "tsx scripts/suggest-viewer/build.ts",
+    "suggest:open": "tsx scripts/suggest-viewer/open.ts"
   },
   "dependencies": {
     "@knockd/shared": "workspace:*",
