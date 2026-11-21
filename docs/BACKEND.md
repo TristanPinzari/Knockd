@@ -87,7 +87,8 @@ A first draft. Names and columns will change as the API is designed.
 ### Live sessions
 | Table | Key columns |
 |---|---|
-| `sessions` | id, join_code, created_by (nullable for guests), status (`live` / `ended` / `processed`), started_at, ended_at, area (polygon), loaded_map_id, loaded_layers |
+| `sessions` | id, join_code, created_by (nullable for guests), status (`live` / `ended` / `processed`), started_at, ended_at, loaded_map_id, loaded_layers |
+| `session_cells` | session_id, cell_id. The session area grows as cells are loaded (~1 km grid, see [API.md](API.md#map-cells)) |
 | `session_members` | id, session_id, user_id (nullable for guests), display_name, colour, joined_at |
 | `pings` | **hypertable**: time, session_id, member_id, location (point), accuracy, client_id (unique) |
 | `leads` | id (client UUID), session_id, member_id, house_id, grade (`A` / `B` / `C`), created_at, deleted_at (undo) |
