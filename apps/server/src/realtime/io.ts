@@ -27,6 +27,18 @@ export function isOnline(sessionId: string, memberId: string): boolean {
   return (presence.get(sessionId)?.get(memberId) ?? 0) > 0;
 }
 
+/** Mark a member online/offline without a socket (simulated-crew bots). */
+export function setVirtualPresence(sessionId: string, memberId: string, online: boolean): void {
+  const members = presence.get(sessionId) ?? new Map<string, number>();
+  presence.set(sessionId, members);
+  const before = members.get(memberId) ?? 0;
+  const after = Math.max(0, before + (online ? 1 : -1));
+  if (after === 0) members.delete(memberId);
+  else members.set(memberId, after);
+  if (members.size === 0) presence.delete(sessionId);
+  if ((before === 0) !== (after === 0)) emitToSession(sessionId, "member:status", { memberId, online });
+}
+
 /** Broadcast to everyone in a session. */
 export function emitToSession<E extends keyof ServerToClientEvents>(
   sessionId: string,

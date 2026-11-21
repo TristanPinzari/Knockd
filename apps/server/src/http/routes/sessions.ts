@@ -10,12 +10,14 @@ import {
   PostMessageBody,
   PostPinBody,
   PostPingsBody,
+  StartSimBody,
   Uuid,
 } from "@knockd/shared";
 import { maybeAccountUser, optionalAccount } from "../../auth/account";
 import * as planning from "../../sessions/planning";
 import * as sessions from "../../sessions/service";
 import { getStats } from "../../sessions/stats";
+import * as sim from "../../sim/runner";
 import * as writes from "../../sessions/writes";
 import { HttpError, parse } from "../errors";
 import { requireSession, sessionCtx } from "../session-auth";
@@ -132,4 +134,23 @@ sessionsRouter.post("/:id/plan/load", async (req, _res) => {
 
 sessionsRouter.get("/:id/knock-rate", async (_req, res) => {
   res.json(await planning.getKnockRate(sessionCtx(res).sessionId));
+});
+
+// ============================== Simulated crew ==============================
+
+// Session admin only. Bots join as members and walk the session's area (or their blocks in the applied plan).
+sessionsRouter.post("/:id/sim", async (req, res) => {
+  const { sessionId, memberId } = sessionCtx(res);
+  const { status } = await sessions.requireAdmin(sessionId, memberId);
+  if (status !== "live") throw new HttpError(410, "session_ended", "This session has ended");
+  const { bots, pace } = parse(StartSimBody, req.body ?? {});
+  res.status(201).json({ botMemberIds: await sim.startSim(sessionId, bots, pace) });
+});
+
+// Stops the bots and removes them from the session.
+sessionsRouter.delete("/:id/sim", async (_req, res) => {
+  const { sessionId, memberId } = sessionCtx(res);
+  await sessions.requireAdmin(sessionId, memberId);
+  await sim.stopSim(sessionId, { leave: true });
+  res.status(204).end();
 });

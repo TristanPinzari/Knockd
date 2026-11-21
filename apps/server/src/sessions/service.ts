@@ -83,30 +83,54 @@ export async function joinSession(body: JoinSessionBody, userId?: string): Promi
   if (!session) throw new HttpError(404, "session_not_found", "No session with that code");
   if (session.status !== "live") throw new HttpError(410, "session_ended", "That session has ended");
 
-  const { memberId, rejoined } = await db.transaction(async (tx) => {
+  const [added] = await addMembers(session.id, [{ displayName: body.displayName, userId }]);
+  const res = await accessResponse(session.id, added!.memberId);
+  if (!added!.rejoined) emitToSession(session.id, "member:joined", { member: res.member });
+  return res;
+}
+
+/**
+ * Adds members to a live session (people joining, or simulated-crew bots), enforcing the
+ * member limit and giving each a free colour. Doesn't broadcast; callers do.
+ */
+export async function addMembers(
+  sessionId: string,
+  people: { displayName: string; userId?: string; isBot?: boolean }[],
+): Promise<{ memberId: string; rejoined: boolean }[]> {
+  return db.transaction(async (tx) => {
     // Lock the session row so two people joining at once can't both take the last spot or colour.
-    await tx.execute(sql`SELECT 1 FROM ${sessions} WHERE ${sessions.id} = ${session.id} FOR UPDATE`);
+    await tx.execute(sql`SELECT 1 FROM ${sessions} WHERE ${sessions.id} = ${sessionId} FOR UPDATE`);
     const active = await tx
       .select({ id: sessionMembers.id, colour: sessionMembers.colour, userId: sessionMembers.userId })
       .from(sessionMembers)
-      .where(activeMembers(session.id));
-    const existing = userId ? active.find((m) => m.userId === userId) : undefined;
-    if (existing) return { memberId: existing.id, rejoined: true };
-    if (active.length >= MAX_SESSION_MEMBERS)
-      throw new HttpError(409, "session_full", `Sessions are limited to ${MAX_SESSION_MEMBERS} people`);
+      .where(activeMembers(sessionId));
     const used = new Set(active.map((m) => m.colour));
-    const colour = MEMBER_COLOURS.find((c) => !used.has(c)) ?? MEMBER_COLOURS[active.length % MEMBER_COLOURS.length]!;
-    const [member] = await tx
-      .insert(sessionMembers)
-      .values({ sessionId: session.id, userId, displayName: body.displayName, colour })
-      .returning({ id: sessionMembers.id });
-    return { memberId: member!.id, rejoined: false };
-  });
+    let count = active.length;
+    const results: { memberId: string; rejoined: boolean }[] = [];
 
-  const res = await accessResponse(session.id, memberId);
-  if (!rejoined) emitToSession(session.id, "member:joined", { member: res.member });
-  return res;
+    for (const person of people) {
+      const existing = person.userId ? active.find((m) => m.userId === person.userId) : undefined;
+      if (existing) {
+        results.push({ memberId: existing.id, rejoined: true });
+        continue;
+      }
+      if (count >= MAX_SESSION_MEMBERS)
+        throw new HttpError(409, "session_full", `Sessions are limited to ${MAX_SESSION_MEMBERS} people`);
+      const colour = MEMBER_COLOURS.find((c) => !used.has(c)) ?? MEMBER_COLOURS[count % MEMBER_COLOURS.length]!;
+      used.add(colour);
+      count++;
+      const [member] = await tx
+        .insert(sessionMembers)
+        .values({ sessionId, userId: person.userId, displayName: person.displayName, colour, isBot: !!person.isBot })
+        .returning({ id: sessionMembers.id });
+      results.push({ memberId: member!.id, rejoined: false });
+    }
+    return results;
+  });
 }
+
+/** Members in the API shape (used by the simulated crew to announce bots). */
+export const getMembers = (sessionId: string) => loadMembers(sessionId);
 
 async function accessResponse(sessionId: string, memberId: string): Promise<SessionAccessRes> {
   const [session, members, token] = await Promise.all([
@@ -242,7 +266,8 @@ export async function removeMember(sessionId: string, adminId: string, memberId:
   await disconnectMember(sessionId, memberId);
 }
 
-async function requireAdmin(sessionId: string, memberId: string) {
+/** Throws 403 unless `memberId` created the session (the session admin). */
+export async function requireAdmin(sessionId: string, memberId: string) {
   const [session] = await db
     .select({ status: sessions.status, adminId: sessions.createdByMemberId })
     .from(sessions)

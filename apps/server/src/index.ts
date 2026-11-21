@@ -6,6 +6,7 @@ import { env } from "./env";
 import { logger } from "./logger";
 import { registerHandlers } from "./realtime/handlers";
 import { closeRealtime, createRealtime } from "./realtime/io";
+import { stopAllSims } from "./sim/runner";
 
 const server = createServer(createApp());
 createRealtime(server, registerHandlers);
@@ -16,6 +17,7 @@ server.listen(env.PORT, () => {
 
 async function shutdown(signal: string) {
   logger.info(`${signal} received, shutting down`);
+  await stopAllSims();
   await closeRealtime();
   server.close();
   await pg.end({ timeout: 5 });
