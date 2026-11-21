@@ -1,5 +1,11 @@
 # Knockd — Door-to-Door Team Coordination App
 
+This README covers the project scope. Technical docs:
+- [Backend](docs/BACKEND.md): stack, architecture, data model, deployment
+- [API](docs/API.md): REST endpoints and socket events
+- [Mobile](docs/MOBILE.md): mobile app (Jasmine)
+- [Web](docs/WEB.md): web app
+
 ---
 
 ## The Problem
@@ -53,7 +59,7 @@ Walking past a street isn't the same as knocking it. Each street is classified u
 
 ### Blocks
 - A block is an area enclosed by roads: the "big rectangle" of houses crews actually work one at a time
-- Blocks are generated from OpenStreetMap road data (PostGIS polygonize). House outlines come from open building footprint data (e.g. Microsoft's Canadian building footprints)
+- Blocks are generated automatically from map data, and every house in a block is known from open building outline data
 - Blocks are the unit for selecting, assigning and measuring coverage. Each block knows its house count, and its coverage is the % of its streets that were worked
 
 ### Planning mode
@@ -68,7 +74,7 @@ Replaces screenshot-and-draw. A shared planning screen inside the session:
   - Knock rate in houses per hour (learned from the crew's past sessions, with a default such as 25/hour per pair when there's no history)
   - Starting point (the car or current location)
 - The algorithm grows one group of connected blocks per person or pair outward from different starting blocks, balanced by house count against the time budget. Different starting blocks give the different options
-- An optional server API can add heavier work later, like real walking routes through each chunk (OSRM)
+- An optional server API can add heavier work later, like real walking routes through each chunk
 
 ### Leads
 Crews selling things like painting or roofing rarely make a sale at the door. The goal is a lead: the homeowner's number and interest, so the company can call back to book a quote. Leads are graded by the person who got them:
@@ -105,7 +111,7 @@ Crews use previous leads nearby as references ("we just did a quote for the plac
 - *Nice to have:* planning suggestions that prefer blocks near previous leads
 
 ### Offline
-- GPS points, leads and planning changes are stored on the phone (SQLite), each with a unique ID
+- GPS points, leads and planning changes are stored on the phone, each with a unique ID
 - Sent when the connection comes back. The server ignores duplicates
 - Worked/passed-by classification uses the GPS timestamps, so delayed uploads don't affect it
 
@@ -165,7 +171,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - Smarter "where next?" that also uses past lead rate
 - Best time to knock, by hour (5–8pm is already the established default)
 - Plan vs actual: blocks assigned vs blocks actually worked
-- **Gemini add-on:** "ask your data" questions like "which neighbourhoods sold best in October?", turned into read-only SQL on the team's data
+- **Gemini add-on:** "ask your data" questions like "which neighbourhoods sold best in October?", answered from the team's data
 - CSV export
 
 ## Accounts & Data
@@ -179,11 +185,6 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and lead grades are saved. No names or phone numbers are ever stored. The raw GPS points are deleted
 - **Positioning:** the history is the crew's shared memory, not a way for a manager to track people. Paths are saved as streets walked per session, not a minute-by-minute record of where someone was
 
-**Designing Phase 1 so Phase 2 is easy:**
-- All data goes through the server's API, never straight from the phone to the database, so the web app can use the same API
-- Save session data from day one. Even if the web app comes later, its history starts with the first session
-- Keep the server, mobile app and (later) web app in one repo with shared types
-
 ## Why It's Different
 
 Every existing app (SPOTIO, SalesRabbit, Knockio, Timeero, etc.) is built manager-down. A boss watches reps from a dashboard. They're CRM-first, $15–50/user/month, and overkill for a small informal crew.
@@ -194,37 +195,11 @@ This is peer-to-peer. Teammates see each other, not a manager seeing subordinate
 
 **Must work on both iOS and Android.** This is non-negotiable. Door-to-door crews are mixed — some people have iPhones, some have Androids. An iOS-only or Android-only app kills the "whole crew joins a session" concept on day one. Every technical decision should be made with cross-platform in mind from the start, not bolted on later.
 
-## Technical Approach
-
-- React Native + Expo (cross-platform iOS/Android — satisfies the platform requirement above)
-- Google Maps SDK for the map layer (react-native-maps; streets as polylines, blocks and houses as polygons)
-- **Express + Socket.io** server: one backend for both the mobile and web apps. REST API for teams, maps, plans and uploads; Socket.io for live sync (dots, trails, pins, chat, leads and planning), with one room per session code
-- **Tiger Data** (Postgres + PostGIS + TimescaleDB) as the database:
-  - Hypertable for GPS pings during a session
-  - PostGIS streets, blocks and house footprints
-  - Worked streets with timestamps for history
-  - Continuous aggregates for stats over time (e.g. each crew's knock rate)
-  - Map queries return what's in view as GeoJSON (`ST_AsGeoJSON`)
-- **OSRM** map matching to snap GPS trails onto real streets
-- Hosted on a **Vultr** VM (Docker Compose via Coolify) running the Socket.io server and OSRM
-- **Auth0** for accounts and team invites (shared by mobile and the web app)
-- Web app: React single-page app (Vite) using the Express API and Google Maps. No server-side rendering needed since everything is behind a login. Census data (median household income for "where next?", plus demographics) loaded into PostGIS from Statistics Canada dissemination areas
-- Data model: teams → members, sessions (unique per team + session ID), plans. Maps are saved views (boundary polygon + filters) over the team's sessions
-- **Gemini:** optional web add-on for "ask your data". No role on mobile
-
-```
-Phones  <--websockets-->  Vultr VM                    -->  Tiger Data
-Web app  <--REST-->       ├─ Express + Socket.io server    (Postgres + PostGIS)
-                          └─ OSRM map matching
-```
-
-Later, Firebase could take over the live layer (offline queueing, auto-reconnect) while Tiger Data keeps the permanent history. Not needed for the MVP.
-
 ## Name & Domain
 
 - Working name: **Knockd** — checked on App Store and Google Play, no conflicting app found
 - For the GoDaddy Registry domain prize, the domain has to be on a GoDaddy Registry extension (e.g. .co, .us, .biz), not .com. Something like knockd.co. Check the eligible list at the event
-- Register it early and point it at the Vultr server so HTTPS works from the start
+- Register it early so it's ready before the demo
 
 ## Market
 
@@ -247,7 +222,7 @@ Validated market (D2D software is a real category) but the lightweight peer-coor
 Check how many prize tracks one project can enter.
 
 **Who does what:**
-- Gansi: backend (server, database, map matching, deployment)
+- Tristan: backend (server, database, map matching, deployment)
 - Jasmine: mobile app
 - Web app: split once those are done
 
