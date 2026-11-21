@@ -430,4 +430,10 @@ Connect with `auth: { token }` (session token). The server checks it and joins t
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `plan:edit` | `{ op: "assign", blockId, groupIndex }` · `{ op: "unassign", blockId }` · `{ op: "setGroups", groups }` · `{ op: "draw", stroke }` · `{ op: "note", note }` · `{ op: "clear" }` |
 
-If two people edit the same block at once, the last edit wins.
+Also `{ op: "erase", drawingId }` and `{ op: "removeNote", noteId }`.
+
+- Send with an acknowledgement callback: `socket.emit("plan:edit", op, (res) => ...)`. `res` is `{ ok: true }` or `{ ok: false, error }` (e.g. `"No group 9"`, or the session has ended)
+- On success everyone (including the sender) gets `plan:draft` with the full draft
+- **Instant updates:** run `applyPlanEdit(draft, op)` from `@knockd/shared` locally before the server replies. It's the exact code the server runs, so the results match. Replace with the server's `plan:draft` when it arrives
+- Edits are applied one at a time per session. If two people assign the same block at once, the last edit wins
+- Limits: 8 groups, 200 drawings (500 points each), 50 notes

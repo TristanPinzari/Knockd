@@ -120,7 +120,7 @@ export type PlanGroup = z.infer<typeof PlanGroup>;
 export const Drawing = z.object({
   id: Uuid,
   kind: z.enum(["freehand", "arrow"]),
-  points: z.array(LatLng).min(2),
+  points: z.array(LatLng).min(2).max(500),
   colour: z.string(),
 });
 export type Drawing = z.infer<typeof Drawing>;

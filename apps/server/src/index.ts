@@ -4,10 +4,11 @@ import { createApp } from "./app";
 import { pg } from "./db/client";
 import { env } from "./env";
 import { logger } from "./logger";
+import { registerHandlers } from "./realtime/handlers";
 import { closeRealtime, createRealtime } from "./realtime/io";
 
 const server = createServer(createApp());
-createRealtime(server);
+createRealtime(server, registerHandlers);
 
 server.listen(env.PORT, () => {
   logger.info(`Knockd API listening on http://localhost:${env.PORT}`);
