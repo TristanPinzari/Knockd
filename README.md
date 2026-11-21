@@ -112,7 +112,7 @@ Replaces the screenshot-and-draw huddle at the car. **One shared plan per sessio
 - **Route:** a dashed line with an arrow tip ("Jasmine, go this way"). Works house by house, without blocks
 - **Freehand:** a solid line, for circling or marking boundaries
 - **Note:** short text on the map
-- **Eraser:** drag over the map, and any drawing it touches is removed whole
+- **Eraser:** drag over the map, and any drawing it touches is removed whole, **whoever drew it**. Anyone can also unclaim any block or remove any note. No need to ask someone to delete their own
 - **Undo / redo:** only your own actions, never a teammate's
 - **Clear:** removes only **your own** drawings, notes and claims. Every item records who made it, separately from who it's for
 
