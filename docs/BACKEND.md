@@ -258,11 +258,13 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
 
 ## Deployment
 
-- **Vultr VM** with the Coolify Marketplace image
-- Coolify deploys `docker-compose.yml` from GitHub on every push to `main`. Two services:
-  - `api`: the Express + Socket.io server (also serves `london.pmtiles`)
-  - `osrm`: `osrm-routed` serving the London data
-- Coolify handles HTTPS once the domain points at the VM (its built-in proxy replaces a separate Caddy setup)
+- **Vultr VM** (Toronto, 4 vCPU / 8 GB) with the Coolify Marketplace image
+- **`api`**: a Coolify **Application** built from [apps/server/Dockerfile](../apps/server/Dockerfile) (build context: repo root). Coolify redeploys it on every push to `main`
+  - On start it runs `pnpm db:migrate` (new Drizzle migrations + continuous aggregates), then the server
+  - Also serves `london.pmtiles` once it's added
+- **`osrm`** (later, with session processing): a second Coolify resource running `osrm-routed` on the London data, reachable only from the API
+- Coolify's proxy handles HTTPS (Let's Encrypt) and WebSockets once the domain points at the VM, so no separate Caddy setup
+- **Domain:** `knockd.rodeo`. DNS A records `api.knockd.rodeo` (the API) and `coolify.knockd.rodeo` (the dashboard) point at the VM. Vultr region: Toronto
 - The mobile app isn't hosted here: it's built with Expo. Where the web app is hosted is decided when it's built
 - **Tiger Cloud** is managed separately. The connection string goes in an environment variable
 

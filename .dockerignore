@@ -1,0 +1,12 @@
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.husky
+.github
+apps/server/data
+apps/mobile
+apps/web
+docs
+*.log
