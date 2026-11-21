@@ -17,8 +17,14 @@ const Env = z.object({
   CORS_ORIGINS: z.string().default("*"),
   /** Folder with london.pmtiles, served at /tiles. */
   TILES_DIR: z.string().default("data/tiles"),
-  AUTH0_DOMAIN: z.string().optional(),
+  /** e.g. dev-abc123.us.auth0.com (with or without https://). Accounts are disabled if unset. */
+  AUTH0_DOMAIN: z
+    .string()
+    .transform((d) => d.replace(/^https?:\/\//, "").replace(/\/+$/, ""))
+    .optional(),
   AUTH0_AUDIENCE: z.string().optional(),
+  /** Team invite links are `${INVITE_BASE_URL}/${token}`. */
+  INVITE_BASE_URL: z.string().url().default("https://knockd.rodeo/invite"),
   OSRM_URL: z.string().url().optional(),
 });
 

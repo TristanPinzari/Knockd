@@ -35,8 +35,12 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
 // ============================== Create & join ==============================
 
-export async function createSession(body: CreateSessionBody): Promise<SessionAccessRes> {
-  if (body.loadMap) throw new HttpError(401, "unauthorized", "Loading team data needs an account (coming soon)");
+/** `userId` is set when the creator is logged in: the session and their member are linked to their account. */
+export async function createSession(body: CreateSessionBody, userId?: string): Promise<SessionAccessRes> {
+  if (body.loadMap) {
+    if (!userId) throw new HttpError(401, "unauthorized", "Log in to load team data");
+    throw new HttpError(400, "invalid_request", "Loading team data isn't available yet");
+  }
 
   const area = plannedAreaSql(body.area);
   if (body.area.kind === "polygon") await checkDrawnArea(area);
@@ -46,11 +50,11 @@ export async function createSession(body: CreateSessionBody): Promise<SessionAcc
       const { sessionId, memberId } = await db.transaction(async (tx) => {
         const [session] = await tx
           .insert(sessions)
-          .values({ joinCode: newJoinCode(), plannedArea: area })
+          .values({ joinCode: newJoinCode(), plannedArea: area, createdByUserId: userId })
           .returning({ id: sessions.id });
         const [member] = await tx
           .insert(sessionMembers)
-          .values({ sessionId: session!.id, displayName: body.displayName, colour: MEMBER_COLOURS[0]! })
+          .values({ sessionId: session!.id, userId, displayName: body.displayName, colour: MEMBER_COLOURS[0]! })
           .returning({ id: sessionMembers.id });
         await tx.update(sessions).set({ createdByMemberId: member!.id }).where(eq(sessions.id, session!.id));
         await tx.insert(sessionPlans).values({ sessionId: session!.id, draft: EMPTY_PLAN });
@@ -65,7 +69,11 @@ export async function createSession(body: CreateSessionBody): Promise<SessionAcc
   throw new HttpError(500, "internal", "Couldn't generate a unique join code");
 }
 
-export async function joinSession(body: JoinSessionBody): Promise<SessionAccessRes> {
+/**
+ * `userId` is set when the joiner is logged in. A logged-in user who's already in the session
+ * (e.g. reinstalled the app) gets their existing spot back instead of a duplicate member.
+ */
+export async function joinSession(body: JoinSessionBody, userId?: string): Promise<SessionAccessRes> {
   const [session] = await db
     .select({ id: sessions.id, status: sessions.status })
     .from(sessions)
@@ -75,26 +83,28 @@ export async function joinSession(body: JoinSessionBody): Promise<SessionAccessR
   if (!session) throw new HttpError(404, "session_not_found", "No session with that code");
   if (session.status !== "live") throw new HttpError(410, "session_ended", "That session has ended");
 
-  const memberId = await db.transaction(async (tx) => {
+  const { memberId, rejoined } = await db.transaction(async (tx) => {
     // Lock the session row so two people joining at once can't both take the last spot or colour.
     await tx.execute(sql`SELECT 1 FROM ${sessions} WHERE ${sessions.id} = ${session.id} FOR UPDATE`);
     const active = await tx
-      .select({ colour: sessionMembers.colour })
+      .select({ id: sessionMembers.id, colour: sessionMembers.colour, userId: sessionMembers.userId })
       .from(sessionMembers)
       .where(activeMembers(session.id));
+    const existing = userId ? active.find((m) => m.userId === userId) : undefined;
+    if (existing) return { memberId: existing.id, rejoined: true };
     if (active.length >= MAX_SESSION_MEMBERS)
       throw new HttpError(409, "session_full", `Sessions are limited to ${MAX_SESSION_MEMBERS} people`);
     const used = new Set(active.map((m) => m.colour));
     const colour = MEMBER_COLOURS.find((c) => !used.has(c)) ?? MEMBER_COLOURS[active.length % MEMBER_COLOURS.length]!;
     const [member] = await tx
       .insert(sessionMembers)
-      .values({ sessionId: session.id, displayName: body.displayName, colour })
+      .values({ sessionId: session.id, userId, displayName: body.displayName, colour })
       .returning({ id: sessionMembers.id });
-    return member!.id;
+    return { memberId: member!.id, rejoined: false };
   });
 
   const res = await accessResponse(session.id, memberId);
-  emitToSession(session.id, "member:joined", { member: res.member });
+  if (!rejoined) emitToSession(session.id, "member:joined", { member: res.member });
   return res;
 }
 

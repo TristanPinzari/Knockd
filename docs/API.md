@@ -85,7 +85,7 @@ Your recent sessions, including ones not uploaded yet (kept for 7 days).
 
 ### `POST /v1/sessions` 🔓 (or 👤)
 
-Create a session. Guests can create sessions. If an account token is sent, the session is linked to that user and team data can be loaded.
+Create a session. Guests can create sessions. If an Auth0 account token is sent (`Authorization: Bearer <account token>`), the session and your member are linked to your account, which you need to upload it to a team later. Loading team data (`loadMap`) is not built yet.
 
 ```ts
 {
@@ -106,6 +106,8 @@ Create a session. Guests can create sessions. If an account token is sent, the s
 ```
 
 Errors: `404 session_not_found`, `409 session_full` (8 members max), `410 session_ended`
+
+Optionally send an account token, as with create. A logged-in user who is already in the session (e.g. reinstalled the app) gets their existing member and a fresh token back, with no duplicate.
 
 ### `GET /v1/sessions/:id` 🎟️
 
@@ -298,7 +300,7 @@ The crew's learned knock rate for on-device suggestions. Falls back to the defau
 → { team }
 ```
 
-### `POST /v1/teams/:id/sessions` 👤
+Upload a session. You must be on the team, and have been in the session **while logged in** (created or joined it with your account token). The session must have ended (`409` if it is live). Uploading the same session twice is a no-op.
 
 Upload a session. You must be on the team and have been in the session. Uploading the same session twice is a no-op.
 
@@ -312,7 +314,7 @@ Session history.
 
 ### `GET /v1/teams/:id/sessions/:sessionId` 👤
 
-Session detail for replay: members, matched paths, street coverage, leads and stats.
+Session detail for replay: members, matched paths, street coverage, leads and stats. **Not built yet** (needs end-of-session processing).
 
 ### `DELETE /v1/teams/:id/sessions/:sessionId` 🛡️
 
