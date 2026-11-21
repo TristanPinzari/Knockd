@@ -96,19 +96,47 @@ Walking past a street isn't the same as knocking it. Each street is classified u
 
 ### Planning mode
 
-Replaces screenshot-and-draw. A shared planning screen inside the session:
+> **Design agreed, not built yet.** The current planning API (groups, draft/Apply, plan library) is being replaced by what's described here.
 
-- Everyone in the huddle sees it live on their own phone
-- Draw freehand, tap blocks to assign them to a person or pair, add arrows or short notes
-- Changes stay a draft until someone taps **Apply**, then it becomes the shared map everyone works from
-- **Optional suggestions:** tap Suggest to get 3 split options, generated on the phone (instant, works offline). Settings:
-  - Crew size (from the session)
-  - Solo or pairs (e.g. a crew of 4 in pairs = 2 chunks; pairs split a chunk by side of the street)
-  - Time window (default now → 8pm, since 5–8pm after work is the best time to knock)
-  - Knock rate in houses per hour (learned from the crew's past sessions, with a default such as 25/hour per pair when there's no history)
-  - Starting point (the car or current location)
-- The algorithm grows one group of connected blocks per person or pair outward from different starting blocks, balanced by house count against the time budget. Different starting blocks give the different options
-- _Nice to have:_ real walking routes through each assigned chunk
+Replaces the screenshot-and-draw huddle at the car. **One shared plan per session**, edited live by anyone, with everyone seeing changes instantly. **No groups to set up and no draft/Apply step.** It supports however a crew likes to plan: people claiming their own areas, an organiser assigning others, pairs, or just sketching routes.
+
+**Colours**
+
+- A **12-colour palette**. Each person gets one as they join (max 8 per session) and keeps it everywhere: their dot, their trail, blocks claimed for them, and anything drawn for them
+- The unused colours (always at least 4) are **utility colours**, for instructions not aimed at anyone in particular
+- The picker shows teammates' colours first, with a **"More colours"** button for the utility ones, so the toolbar stays small
+
+**Tools** (pick a colour, then use a tool)
+
+- **Claim blocks:** tap blocks to claim them in the selected colour (yours by default). An organiser picks a teammate's colour to claim for them. Two colours on one block = a pair
+- **Route:** a dashed line with an arrow tip ("Jasmine, go this way"). Works house by house, without blocks
+- **Freehand:** a solid line, for circling or marking boundaries
+- **Note:** short text on the map
+- **Eraser:** drag over the map, and any drawing it touches is removed whole
+- **Undo / redo:** only your own actions, never a teammate's
+- **Clear:** removes only **your own** drawings, notes and claims. Every item records who made it, separately from who it's for
+
+**Suggest** (routes for a set of houses, run on the phone)
+
+1. **Select houses** with a circle brush: every house inside a circle is included and **must be visited**. A circle in deselect mode removes houses (e.g. a corner store or a house to skip)
+2. Optionally drop a **regroup pin** for where everyone should end up. Without one, anywhere is fine
+3. Tap **Suggest**. The phone plans routes for each way of splitting the crew (taken from the session):
+   - **Solo**, **pairs**, **half the crew** and **everyone together** (for 8 people: solo, pairs, quads, all together). Odd numbers form one trio or a solo
+4. **Options are ranked by effectiveness**: the most doors in the least time, and everyone ending up close together:
+   - **Score = when the last group finishes + time for everyone to regroup** (at the pin, or wherever groups end closest)
+   - Every door counts the same. Time = walking (~1.3 m/s) + a fixed ~1 minute per door, with doors shared within a group (e.g. one person per side of the street) while walking isn't
+   - Shown like _"Pairs: done ~7:35 pm · regroup near Oakridge & Elm"_
+5. **Picking an option** draws a dashed **route per group** in its members' colours and claims their blocks. It replaces the current plan for those houses, and everything stays editable. Group members are assigned randomly and are easy to swap
+
+How it plans:
+
+- Builds a **street network** from the streets the phone already has (segments meet at intersections). Selected houses mark which street segments must be walked
+- For each option, splits the work into groups **radiating out from the car** like pizza slices, so everyone starts knocking right away, balanced by **number of doors** with **compactness** as a tiebreaker
+- Builds a route through each group's streets, aiming to end near the others or the regroup pin, and tries a few variants per option, keeping the best
+- Examples it should get right: with the car at the bottom of a 2×2 square of blocks, **pairs** each take a bottom then top square and all finish together at the top, which beats 4 solos where two first walk past blocks without knocking. With the car in the middle, **solos** each take a quadrant and loop back to the car
+- Good heuristics, not a perfect solution (multi-person street routing is a hard problem), and fast enough for a phone
+
+**Team layers:** when the session loads team data, the web's **highlights** and **team notes** appear as **read-only** layers that each person can toggle on or off.
 
 ### Leads
 
@@ -135,7 +163,6 @@ Plain stats, per person and for the crew: streets worked vs passed, blocks compl
 ### Uploading to a team
 
 - At the end of a session, everyone in it who's on a team gets a prompt listing their teams: "Add to London Painters?"
-- Plans from the team's plan library can be loaded into planning mode as a starting point (see Web App)
 
 ### Loading team data into a session
 
@@ -145,13 +172,13 @@ Crews use previous leads nearby as references ("we just did a quote for the plac
   - **Previous leads:** houses graded in past sessions, with grade and how long ago. On by default, filterable by grade (e.g. A only)
   - **Past coverage:** "hit X time ago" paths, with the same fading as the web map
   - **Lead-rate colours:** blocks coloured green to red
+  - **Highlights** and **team notes** made on the web (read-only on the phone)
 - Only data inside the session's area is loaded, and it's downloaded when the session starts so it works offline
 - Previous leads show a small grade badge on the house. Tap it to see "A lead · 8 months ago"
 - The app doesn't know which leads became jobs (that's in the company's CRM), so references are shown as leads, not confirmed customers
 - **Everyone in the session sees loaded data**, including guests
 - Each person can toggle each layer on or off on their own phone, so the map doesn't get cluttered
 - Off by default, so the live map stays focused on today unless the creator loads something
-- _Nice to have:_ planning suggestions that prefer blocks near previous leads
 
 ### Offline
 
@@ -179,7 +206,7 @@ The app runs for a whole shift and crews can't charge mid-job, so battery use is
 2. Home (teams, active session, start)
 3. Create session (area picker, optional team data to load)
 4. Lobby (join code, member colours)
-5. Plan (assign blocks, Suggest, Apply)
+5. Plan (colour picker, claim blocks, route, freehand, note, eraser, undo/redo, select houses + Suggest)
 6. Live map (the main screen)
 7. House sheet (A/B/C grade with undo, short note, previous lead info)
 8. Team progress (leaderboard, coverage so far)
@@ -203,7 +230,10 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
   - Maps can also filter by date, e.g. "Summer 2026"
 - A session in Byron shows up on both London and World automatically. Nobody has to add it to each map, and removing a session removes it everywhere
 - A company that wants one combined picture puts everyone in one team
-- **Team roles:** owner/admin invites people and can remove sessions. Members can view, upload and make plans
+- **Team roles:**
+  - **Owner:** everything, plus inviting people, changing roles, removing people and deleting the team
+  - **Editor:** can also create and delete highlights and notes, approve "where next?" suggestions, and remove sessions
+  - **Viewer:** sees everything and can upload sessions
 
 ### How the map is drawn
 
@@ -225,20 +255,35 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 ### Core features
 
 - **Time slider:** replay how the territory filled in ("show the map as of 3 weeks ago")
-- **Filters:** date range, crew, neighbourhood
-- **Stats:** coverage, houses worked, distance, leads by grade, and **lead rate** = (A + B leads) ÷ houses worked, per session or per area
+- **Filters:** date range, map (area)
+- **Stats:** the team's **combined** results for an area: coverage, houses worked, distance, leads by grade, and **lead rate** = (A + B leads) ÷ houses worked. Per-person stats and leaderboards exist only inside a single session (and its replay), never across sessions. Keeping per-agent history would turn Knockd into a CRM
 - **"Hit X time ago"** for any street or block
-- **Where next?:** a simple ranking of how wealthy an area is (census median household income) × how long since it was last hit
 - **Previous paths and session history:** replay any past session and see which streets each person walked
-- **Plan library** (after the team map works): a boss sits down and makes several plans (blocks assigned per person or pair). The crew picks one in the field, it loads into mobile planning mode, and it's marked as used once a session runs it. Plans belong to the team and can be tied to a map
+
+### Marking where to go: highlights and notes
+
+> **Design agreed, not built yet.** Replaces the plan library.
+
+Bosses used to send screenshots of Google Maps with highlighter marks on the areas and roads to do. The web does the same, and nothing more: planning blocks or routes ahead of time doesn't work, because time and crew size aren't known until the crew is at the car. Planning happens on the phone.
+
+- **Highlights:** highlighter strokes along roads, or loops around areas, in one of **6 preset colours**. No built-in meaning: the team decides its own convention (e.g. one colour for "great area", another for "avoid"). No text
+- **Notes:** short text pinned on the map, for anything that needs explaining
+- Shown on the web team map and, when a session loads team data, on phones as **read-only** layers each person can toggle
+- **Created and deleted only on the web**, manually, by owners and editors. Highlights look like highlighter strokes (thick, translucent), so they don't blend into the lead-rate block colours
+
+**Where next? → highlight**
+
+- A list of suggested blocks, ranked by how wealthy the area is (census median household income) × how long since it was last hit
+- **Preview** a suggestion: the map shows a proposed highlight over the area and a draft note explaining why, e.g. "Not knocked in 4 months · median income $112k · 2 A leads nearby last spring · 38 houses"
+- **Approve** to add the highlight and note to the team map (owners and editors), or dismiss it
+- **Gemini writes the note** from facts the backend has already worked out, so it explains and doesn't decide anything. If Gemini isn't available, the note falls back to a simple template
 
 ### Nice to have
 
 - Demographics overlay (income, homeownership, home age, density) and demographics compared with lead rate
 - Smarter "where next?" that also uses past lead rate
 - Best time to knock, by hour (5–8pm is already the established default)
-- Plan vs actual: blocks assigned vs blocks actually worked
-- **Gemini add-on:** "ask your data" questions like "which neighbourhoods sold best in October?", answered from the team's data
+- **Gemini "ask your data":** questions like "which neighbourhoods sold best in October?", answered from the team's data
 - CSV export
 
 ### Screens
@@ -247,7 +292,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 2. Team dashboard
 3. Team map (lead-rate colours, path fade, time slider)
 4. Session replay
-5. Plan library and members
+5. Highlights and notes (draw, "where next?" previews), members
 
 ## Accounts & Data
 
@@ -303,7 +348,7 @@ Knockd is built for the second kind: trails that fade with age, "hit X time ago"
 - Best Use of Auth0: accounts and team invites
 - Best Domain Name from GoDaddy Registry
 - Best Use of Entire: use Sessions and Graph while building
-- Best Use of Gemini: only if the "ask your data" add-on gets built
+- Best Use of Gemini: writes the justification note for "where next?" suggestions (and "ask your data" if time allows)
 
 Check how many prize tracks one project can enter.
 
