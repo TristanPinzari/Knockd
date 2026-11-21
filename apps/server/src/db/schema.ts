@@ -213,10 +213,15 @@ export const pings = pgTable(
 );
 
 /** id is the client-generated UUID (clientId in the API). */
+/**
+ * Hypertable on created_at (custom migration). The primary key includes created_at because
+ * Timescale requires it. created_at comes from the phone (when the lead was marked), so an
+ * offline retry has the same (id, created_at) and is deduplicated.
+ */
 export const leads = pgTable(
   "leads",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").notNull(),
     sessionId: uuid("session_id")
       .notNull()
       .references(() => sessions.id, { onDelete: "cascade" }),
@@ -234,7 +239,11 @@ export const leads = pgTable(
     /** Set on undo. */
     deletedAt: ts("deleted_at"),
   },
-  (t) => [index("leads_session_idx").on(t.sessionId), index("leads_house_idx").on(t.houseId)],
+  (t) => [
+    primaryKey({ columns: [t.id, t.createdAt] }),
+    index("leads_session_idx").on(t.sessionId),
+    index("leads_house_idx").on(t.houseId),
+  ],
 );
 
 export const pins = pgTable(
@@ -296,6 +305,7 @@ export const sessionPaths = pgTable(
   (t) => [primaryKey({ columns: [t.sessionId, t.memberId] }), index("session_paths_geom_idx").using("gist", t.path)],
 );
 
+/** Hypertable on first_seen (custom migration), feeding the knock_rate_hourly continuous aggregate. */
 export const sessionStreetCoverage = pgTable(
   "session_street_coverage",
   {
@@ -310,11 +320,13 @@ export const sessionStreetCoverage = pgTable(
       .references(() => streets.id),
     durationS: integer("duration_s").notNull(),
     classification: streetClassification("classification").notNull(),
+    /** Houses whose nearest street is this one. Stored here so knock rate needs no join. */
+    houses: integer("houses").notNull().default(0),
     firstSeen: ts("first_seen").notNull(),
     lastSeen: ts("last_seen").notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.sessionId, t.memberId, t.streetId] }),
+    primaryKey({ columns: [t.sessionId, t.memberId, t.streetId, t.firstSeen] }),
     index("session_street_coverage_street_idx").on(t.streetId, t.lastSeen),
   ],
 );

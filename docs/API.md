@@ -183,7 +183,8 @@ A batch of GPS points, sent every 15–30 seconds or when catching up after bein
 ### `POST /v1/sessions/:id/leads` 🎟️
 
 ```ts
-{ clientId, houseId, grade: "A" | "B" | "C", note?: string } → { lead }
+{ clientId, t, houseId, grade: "A" | "B" | "C", note?: string } → { lead }
+// t: when the lead was marked on the phone (ISO timestamp). Becomes createdAt.
 // note: optional, max 140 characters
 // lead = { clientId, memberId, houseId, grade, note, createdAt, updatedAt }
 ```

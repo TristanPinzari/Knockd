@@ -156,7 +156,14 @@ export type PostPingsBody = z.infer<typeof PostPingsBody>;
 export const PostPingsRes = z.object({ accepted: z.number().int() });
 export type PostPingsRes = z.infer<typeof PostPingsRes>;
 
-export const PostLeadBody = z.object({ clientId: Uuid, houseId: RefId, grade: Grade, note: LeadNote.optional() });
+/** `t` is when the lead was marked on the phone. With clientId it deduplicates offline retries. */
+export const PostLeadBody = z.object({
+  clientId: Uuid,
+  t: Timestamp,
+  houseId: RefId,
+  grade: Grade,
+  note: LeadNote.optional(),
+});
 export type PostLeadBody = z.infer<typeof PostLeadBody>;
 export const PostLeadRes = z.object({ lead: Lead });
 export type PostLeadRes = z.infer<typeof PostLeadRes>;
