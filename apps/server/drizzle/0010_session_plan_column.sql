@@ -1,0 +1,2 @@
+ALTER TABLE "session_plans" ALTER COLUMN "draft" SET DEFAULT '{"claims":[],"drawings":[],"notes":[]}'::jsonb;--> statement-breakpoint
+ALTER TABLE "session_plans" ADD COLUMN "plan" jsonb DEFAULT '{"claims":[],"drawings":[],"notes":[]}'::jsonb NOT NULL;

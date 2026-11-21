@@ -22,7 +22,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { Layer, PlanContent, PlanGroup } from "@knockd/shared";
+import type { Layer, PlanContent } from "@knockd/shared";
 import { EMPTY_PLAN } from "@knockd/shared";
 import { geometry } from "./geometry";
 
@@ -31,7 +31,7 @@ const ts = (name: string) => timestamp(name, { withTimezone: true });
 
 // ============================== Enums ==============================
 
-export const teamRole = pgEnum("team_role", ["owner", "admin", "member"]);
+export const teamRole = pgEnum("team_role", ["owner", "editor", "viewer"]);
 export const sessionStatus = pgEnum("session_status", ["live", "ended", "processed"]);
 export const leadGrade = pgEnum("lead_grade", ["A", "B", "C"]);
 export const streetClassification = pgEnum("street_classification", ["worked", "passed"]);
@@ -65,7 +65,7 @@ export const teamMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: teamRole("role").notNull().default("member"),
+    role: teamRole("role").notNull().default("viewer"),
     joinedAt: ts("joined_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.teamId, t.userId] }), index("team_members_user_idx").on(t.userId)],
@@ -104,25 +104,43 @@ export const maps = pgTable(
   (t) => [index("maps_team_idx").on(t.teamId)],
 );
 
-/** Plan library. */
-export const plans = pgTable(
-  "plans",
+/**
+ * Web highlighter: strokes along roads (LineString) or loops around areas (Polygon) the team
+ * wants to go to. Colour is one of HIGHLIGHT_COLOURS; the team decides what each means.
+ */
+export const teamHighlights = pgTable(
+  "team_highlights",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     teamId: uuid("team_id")
       .notNull()
       .references(() => teams.id, { onDelete: "cascade" }),
-    mapId: uuid("map_id").references(() => maps.id, { onDelete: "set null" }),
-    name: text("name").notNull(),
-    groups: jsonb("groups").$type<Omit<PlanGroup, "memberIds">[]>().notNull(),
-    usedInSessionId: uuid("used_in_session_id").references(() => sessions.id, { onDelete: "set null" }),
+    geom: geometry("geom", "Geometry").notNull(),
+    colour: text("colour").notNull(),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id),
     createdAt: createdAt(),
-    updatedAt: ts("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("plans_team_idx").on(t.teamId)],
+  (t) => [index("team_highlights_team_idx").on(t.teamId), index("team_highlights_geom_idx").using("gist", t.geom)],
+);
+
+/** Notes pinned on the team map (web). */
+export const teamNotes = pgTable(
+  "team_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    location: geometry("location", "Point").notNull(),
+    text: text("text").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("team_notes_team_idx").on(t.teamId), index("team_notes_location_idx").using("gist", t.location)],
 );
 
 // ============================== Live sessions ==============================
@@ -287,8 +305,8 @@ export const sessionPlans = pgTable("session_plans", {
   sessionId: uuid("session_id")
     .primaryKey()
     .references(() => sessions.id, { onDelete: "cascade" }),
-  draft: jsonb("draft").$type<PlanContent>().notNull().default(EMPTY_PLAN),
-  applied: jsonb("applied").$type<PlanContent>(),
+  /** The live session plan: claims, drawings, notes. */
+  plan: jsonb("plan").$type<PlanContent>().notNull().default(EMPTY_PLAN),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 

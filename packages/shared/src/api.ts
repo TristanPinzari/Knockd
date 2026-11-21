@@ -19,9 +19,11 @@ import {
 } from "./common";
 import {
   Layer,
+  Highlight,
+  HighlightColour,
+  HighlightGeometry,
   Lead,
   LeadNote,
-  LibraryPlan,
   MapView,
   Member,
   PastLead,
@@ -29,13 +31,13 @@ import {
   Message,
   Pin,
   PlanContent,
-  PlanGroup,
   Session,
   SessionAreaInput,
   SessionStatus,
   Stats,
   Team,
   TeamMember,
+  TeamNote,
   TeamRole,
   TeamSummary,
   User,
@@ -100,7 +102,7 @@ export const SessionSnapshotRes = z.object({
   members: z.array(Member),
   leads: z.array(Lead),
   pins: z.array(Pin),
-  plan: z.object({ draft: PlanContent, applied: PlanContent.nullable() }),
+  plan: PlanContent,
   /** Most recent SNAPSHOT_MESSAGE_LIMIT messages, oldest first. */
   messages: z.array(Message),
 });
@@ -129,6 +131,10 @@ export const SessionLayersRes = z.object({
   leadRate: z
     .array(z.object({ blockId: RefId, rate: z.number().min(0).max(1).nullable(), housesWorked: z.number().int() }))
     .optional(),
+  /** Areas/roads the team highlighted on the web. Read-only on phones. */
+  highlights: z.array(Highlight).optional(),
+  /** Notes pinned on the team map. Read-only on phones. */
+  notes: z.array(TeamNote).optional(),
 });
 export type SessionLayersRes = z.infer<typeof SessionLayersRes>;
 
@@ -209,16 +215,8 @@ export type TrailsRes = z.infer<typeof TrailsRes>;
 
 // ============================== Planning (in session) ==============================
 
-export const GetSessionPlanRes = z.object({ draft: PlanContent, applied: PlanContent.nullable() });
+export const GetSessionPlanRes = z.object({ plan: PlanContent });
 export type GetSessionPlanRes = z.infer<typeof GetSessionPlanRes>;
-
-export const ApplyPlanRes = z.object({ applied: PlanContent });
-export type ApplyPlanRes = z.infer<typeof ApplyPlanRes>;
-
-export const LoadPlanBody = z.object({ planId: Uuid });
-export type LoadPlanBody = z.infer<typeof LoadPlanBody>;
-export const LoadPlanRes = z.object({ draft: PlanContent });
-export type LoadPlanRes = z.infer<typeof LoadPlanRes>;
 
 /** Default when a crew has no history (README: ~25 houses/hour per pair). */
 export const DEFAULT_HOUSES_PER_HOUR_PER_GROUP = 25;
@@ -245,6 +243,7 @@ export const GetTeamMembersRes = z.object({ members: z.array(TeamMember) });
 export type GetTeamMembersRes = z.infer<typeof GetTeamMembersRes>;
 
 /** Owner can't be assigned through this endpoint. */
+/** Owner only. The owner's own role can't be changed. */
 export const PatchTeamMemberBody = z.object({ role: TeamRole.exclude(["owner"]) });
 export type PatchTeamMemberBody = z.infer<typeof PatchTeamMemberBody>;
 
@@ -374,36 +373,24 @@ export const WhereNextRes = z.object({
 });
 export type WhereNextRes = z.infer<typeof WhereNextRes>;
 
-// ============================== Plans (library) ==============================
+// ============================== Team highlights & notes (web) ==============================
 
-const LibraryGroup = PlanGroup.omit({ memberIds: true });
+export const BboxQuery = z.object({ bbox: Bbox });
+export type BboxQuery = z.infer<typeof BboxQuery>;
 
-export const GetPlansQuery = z.object({
-  used: z
-    .enum(["true", "false"])
-    .transform((v) => v === "true")
-    .optional(),
-});
-export type GetPlansQuery = z.infer<typeof GetPlansQuery>;
-export const GetPlansRes = z.object({ plans: z.array(LibraryPlan) });
-export type GetPlansRes = z.infer<typeof GetPlansRes>;
+export const CreateHighlightBody = z.object({ geometry: HighlightGeometry, colour: HighlightColour });
+export type CreateHighlightBody = z.infer<typeof CreateHighlightBody>;
+export const HighlightRes = z.object({ highlight: Highlight });
+export type HighlightRes = z.infer<typeof HighlightRes>;
+export const GetHighlightsRes = z.object({ highlights: z.array(Highlight) });
+export type GetHighlightsRes = z.infer<typeof GetHighlightsRes>;
 
-export const CreatePlanBody = z.object({
-  name: LibraryPlan.shape.name,
-  mapId: Uuid.optional(),
-  groups: z.array(LibraryGroup).min(1),
-});
-export type CreatePlanBody = z.infer<typeof CreatePlanBody>;
-
-export const PatchPlanBody = z.object({
-  name: LibraryPlan.shape.name.optional(),
-  mapId: Uuid.nullable().optional(),
-  groups: z.array(LibraryGroup).min(1).optional(),
-});
-export type PatchPlanBody = z.infer<typeof PatchPlanBody>;
-
-export const PlanRes = z.object({ plan: LibraryPlan });
-export type PlanRes = z.infer<typeof PlanRes>;
+export const CreateTeamNoteBody = LatLng.extend({ text: TeamNote.shape.text });
+export type CreateTeamNoteBody = z.infer<typeof CreateTeamNoteBody>;
+export const TeamNoteRes = z.object({ note: TeamNote });
+export type TeamNoteRes = z.infer<typeof TeamNoteRes>;
+export const GetTeamNotesRes = z.object({ notes: z.array(TeamNote) });
+export type GetTeamNotesRes = z.infer<typeof GetTeamNotesRes>;
 
 export const GeoBlocksQuery = z.object({ bbox: Bbox });
 export type GeoBlocksQuery = z.infer<typeof GeoBlocksQuery>;

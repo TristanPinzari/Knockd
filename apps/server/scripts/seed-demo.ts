@@ -10,23 +10,13 @@
  * Usage (from apps/server):
  *   pnpm seed:demo              create the team if missing, add sessions, print an invite link
  *   pnpm seed:demo --reset      delete the demo team and its sessions, then regenerate
- *   pnpm seed:demo --promote    make everyone who joined via the invite an admin
+ *   pnpm seed:demo --promote    make everyone who joined via the invite an editor
  */
 import { randomBytes } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import type { Grade, SimPace } from "@knockd/shared";
+import { HIGHLIGHT_COLOURS, type Grade, type SimPace } from "@knockd/shared";
 import { db, pg } from "../src/db/client";
-import {
-  maps,
-  plans,
-  sessionMembers,
-  sessions,
-  teamInvites,
-  teamMembers,
-  teams,
-  teamSessions,
-  users,
-} from "../src/db/schema";
+import { maps, sessionMembers, sessions, teamInvites, teamMembers, teams, teamSessions, users } from "../src/db/schema";
 import { env } from "../src/env";
 import { processSession } from "../src/jobs/process-session";
 import { distanceM, planRoutes, type Stop } from "../src/sim/routes";
@@ -79,10 +69,10 @@ async function main() {
     if (!team) throw new Error("No demo team yet. Run without --promote first.");
     const promoted = await db
       .update(teamMembers)
-      .set({ role: "admin" })
-      .where(and(eq(teamMembers.teamId, team.id), eq(teamMembers.role, "member")))
+      .set({ role: "editor" })
+      .where(and(eq(teamMembers.teamId, team.id), eq(teamMembers.role, "viewer")))
       .returning({ userId: teamMembers.userId });
-    console.log(`✓ Promoted ${promoted.length} member(s) to admin`);
+    console.log(`✓ Promoted ${promoted.length} member(s) to editor`);
     return;
   }
 
@@ -205,39 +195,42 @@ async function main() {
       );
     }
 
-    // ---------- library plans ----------
-    const [byronMap] = await db
-      .select({ id: maps.id })
-      .from(maps)
-      .where(and(eq(maps.teamId, team!.id), eq(maps.name, "Byron")));
+    // ---------- highlights & notes on never-worked blocks (what a boss would mark on the web) ----------
     const fresh = await db.execute<{ id: number }>(sql`
       SELECT b.id FROM blocks b
       WHERE b.house_count >= 10
         AND b.geom && ST_MakeEnvelope(${BYRON.minLng}, ${BYRON.minLat}, ${BYRON.maxLng}, ${BYRON.maxLat}, 4326)
         AND NOT EXISTS (SELECT 1 FROM session_block_stats s JOIN team_sessions ts ON ts.session_id = s.session_id
                         WHERE ts.team_id = ${team!.id} AND s.block_id = b.id)
-      ORDER BY b.id LIMIT 8`);
-    const ids = fresh.map((b) => Number(b.id));
-    await db.insert(plans).values([
-      {
-        teamId: team!.id,
-        mapId: byronMap?.id,
-        name: "Thursday: fresh blocks, 2 pairs",
-        groups: [
-          { label: "Pair 1", blockIds: ids.slice(0, 2) },
-          { label: "Pair 2", blockIds: ids.slice(2, 4) },
-        ],
-        createdBy: owner!.id,
-      },
-      {
-        teamId: team!.id,
-        mapId: byronMap?.id,
-        name: "Saturday: solo, 4 people",
-        groups: ids.slice(4, 8).map((id, k) => ({ label: `Person ${k + 1}`, blockIds: [id] })),
-        createdBy: owner!.id,
-      },
-    ]);
-    console.log("✓ Added 2 plans to the library");
+      ORDER BY b.id LIMIT 3`);
+    const [blockA, blockB, blockC] = fresh.map((b) => Number(b.id));
+    // Two areas (a loose loop around a block) and one road (a street next to the third block).
+    for (const [blockId, colour] of [
+      [blockA, HIGHLIGHT_COLOURS[1]],
+      [blockB, HIGHLIGHT_COLOURS[0]],
+    ] as const)
+      await db.execute(sql`
+        INSERT INTO team_highlights (team_id, geom, colour, created_by)
+        SELECT ${team!.id}, ST_ExteriorRing(ST_Buffer(geom::geography, 15)::geometry)::geometry, ${colour}, ${owner!.id}
+        FROM blocks WHERE id = ${blockId}`);
+    await db.execute(sql`
+      UPDATE team_highlights SET geom = ST_MakePolygon(geom)
+      WHERE team_id = ${team!.id} AND GeometryType(geom) = 'LINESTRING' AND ST_IsClosed(geom)`);
+    await db.execute(sql`
+      INSERT INTO team_highlights (team_id, geom, colour, created_by)
+      SELECT ${team!.id}, s.geom, ${HIGHLIGHT_COLOURS[2]}, ${owner!.id}
+      FROM houses h JOIN streets s ON s.id = h.street_id
+      WHERE h.block_id = ${blockC} LIMIT 1`);
+    const notes: [number | undefined, string][] = [
+      [blockA, "Older houses, lots of peeling trim"],
+      [blockB, "New owners moved in this summer"],
+      [blockC, "Busy road, knock the side streets"],
+    ];
+    for (const [blockId, text] of notes)
+      await db.execute(sql`
+        INSERT INTO team_notes (team_id, location, text, created_by)
+        SELECT ${team!.id}, ST_PointOnSurface(geom), ${text}, ${owner!.id} FROM blocks WHERE id = ${blockId}`);
+    console.log("✓ Added 3 highlights and 3 notes on never-worked blocks");
 
     // Raw pings older than the aggregates' refresh window would otherwise never be summarised.
     for (const view of ["member_activity_1m", "leads_hourly", "knock_rate_hourly"])
@@ -254,7 +247,7 @@ async function main() {
   console.log(`\nTeam ID: ${team!.id}`);
   console.log(`Invite (7 days): ${env.INVITE_BASE_URL}/${token}`);
   console.log(`  Accept with your login token: POST /v1/invites/${token}/accept`);
-  console.log("  Then run `pnpm seed:demo --promote` to make everyone who joined an admin.");
+  console.log("  Then run `pnpm seed:demo --promote` to make everyone who joined an editor.");
 }
 
 /** Walks a member's route at a realistic pace, producing pings and the odd lead. */

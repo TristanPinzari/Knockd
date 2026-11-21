@@ -11,6 +11,7 @@ import {
   type ServerToClientEvents,
   type SessionAccessRes,
   trailToGeoJSON,
+  utilityColours,
 } from "@knockd/shared";
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
@@ -209,29 +210,53 @@ check(
 const edit = (op: unknown) =>
   // Sent unvalidated on purpose: the server must reject bad edits itself.
   new Promise<{ ok: boolean; error?: string }>((resolve) => sockA.socket.emit("plan:edit", op as PlanEditOp, resolve));
-const g = await edit({
-  op: "setGroups",
-  groups: [
-    { label: "Tristan", memberIds: [a.member.id], blockIds: [] },
-    { label: "Jas", memberIds: [b.member.id], blockIds: [] },
-  ],
+const line = [BYRON, { lat: BYRON.lat + 0.001, lng: BYRON.lng + 0.001 }];
+// Tristan claims a block for himself and one for Jas (organiser style); Jas claims one too.
+const c1 = await edit({ op: "claim", blockId: blockIds[0], memberId: a.member.id });
+const c2 = await edit({ op: "claim", blockId: blockIds[1], memberId: b.member.id });
+const r1 = await edit({
+  op: "draw",
+  stroke: { id: randomUUID(), kind: "route", points: line, memberId: b.member.id, colour: null },
 });
-const as1 = await edit({ op: "assign", blockId: blockIds[0], groupIndex: 0 });
-const as2 = await edit({ op: "assign", blockId: blockIds[1], groupIndex: 1 });
-check("plan edits over socket are acknowledged", g.ok && as1.ok && as2.ok);
-const badEdit = await edit({ op: "assign", blockId: blockIds[0], groupIndex: 9 });
-check("invalid edit is rejected with a reason", !badEdit.ok && !!badEdit.error, badEdit.error);
+const utility = utilityColours(snap.json.members.map((m: { colour: string }) => m.colour))[0];
+const n1 = await edit({
+  op: "note",
+  note: { id: randomUUID(), ...BYRON, text: "start here", memberId: null, colour: utility },
+});
+check("claims, a route for Jas and a utility-colour note are acknowledged", c1.ok && c2.ok && r1.ok && n1.ok);
+const notInSession = await edit({ op: "claim", blockId: blockIds[0], memberId: randomUUID() });
+check("claiming for someone not in the session is rejected", !notInSession.ok, notInSession.error);
+const both = await edit({
+  op: "draw",
+  stroke: { id: randomUUID(), kind: "route", points: line, memberId: b.member.id, colour: utility },
+});
+check("a drawing for a member AND in a utility colour is rejected", !both.ok);
 await wait(300);
-check(
-  "B receives plan:draft",
-  sockB.events.some((e) => e.event === "plan:draft"),
+const updates = sockB.events.filter((e) => e.event === "plan:updated");
+check("B receives plan:updated for each edit", updates.length === 4, `${updates.length} updates`);
+
+// Jas joins Tristan's block (a pair), then clears her own stuff: Tristan's items must survive.
+const sockBJoin = await connect(b.token);
+await new Promise<{ ok: boolean }>((resolve) =>
+  sockBJoin.socket.emit("plan:edit", { op: "claim", blockId: blockIds[0]!, memberId: b.member.id }, resolve),
 );
-const applied = await call("POST", `${S}/plan/apply`, undefined, b.token);
-await wait(300);
 check(
-  "anyone can apply → plan:applied",
-  applied.json?.applied?.groups?.[1]?.blockIds?.[0] === blockIds[1] &&
-    sockA.events.some((e) => e.event === "plan:applied"),
+  "two people on one block (a pair)",
+  (await call("GET", `${S}/plan`, undefined, a.token)).json?.plan?.claims?.filter(
+    (c: { blockId: number }) => c.blockId === blockIds[0],
+  ).length === 2,
+);
+await new Promise<{ ok: boolean }>((resolve) => sockBJoin.socket.emit("plan:edit", { op: "clearMine" }, resolve));
+sockBJoin.socket.close();
+const planNow = (await call("GET", `${S}/plan`, undefined, a.token)).json?.plan;
+check(
+  "Jas's clearMine leaves Tristan's claims, route and note",
+  planNow?.claims?.length === 2 && planNow?.drawings?.length === 1 && planNow?.notes?.length === 1,
+  `${planNow?.claims?.length} claims, ${planNow?.drawings?.length} drawings, ${planNow?.notes?.length} notes`,
+);
+check(
+  "the snapshot includes the live plan",
+  (await call("GET", S, undefined, a.token)).json?.plan?.claims?.length === 2,
 );
 const kr = await call("GET", `${S}/knock-rate`, undefined, a.token);
 check("knock rate → default 25/h", kr.json?.housesPerHourPerGroup === 25 && kr.json?.source === "default");

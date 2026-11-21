@@ -64,7 +64,7 @@ export async function startSim(sessionId: string, count: number, pace: SimPace):
 
   let routes: Awaited<ReturnType<typeof planRoutes>>;
   try {
-    routes = await planRoutes(sessionId, botIds, pace, (await getPlan(sessionId)).applied);
+    routes = await planRoutes(sessionId, botIds, pace, (await getPlan(sessionId)).plan);
   } catch (err) {
     await markLeft(botIds); // don't leave bots behind if there's nothing to walk
     throw err;

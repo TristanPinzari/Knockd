@@ -23,8 +23,9 @@ import { cellBounds, type CellId } from "@knockd/shared";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { db } from "../db/client";
 import { maps, sessions } from "../db/schema";
-import { forbidden, notFound } from "../http/errors";
-import { requireMember } from "../teams/service";
+import { notFound } from "../http/errors";
+import { queryHighlights, queryNotes } from "../teams/markings";
+import { requireEditor, requireMember } from "../teams/service";
 
 /** Lead rate needs this many houses worked before a block gets a colour (otherwise grey). */
 export const LEAD_RATE_MIN_HOUSES = 15;
@@ -84,7 +85,7 @@ export async function listMaps(teamId: string, userId: string): Promise<MapView[
 }
 
 export async function createMap(teamId: string, userId: string, body: CreateMapBody): Promise<MapView> {
-  await requireMember(teamId, userId);
+  await requireEditor(teamId, userId);
   const [row] = await db
     .insert(maps)
     .values({
@@ -100,7 +101,8 @@ export async function createMap(teamId: string, userId: string, body: CreateMapB
 }
 
 export async function updateMap(mapId: string, userId: string, body: PatchMapBody): Promise<MapView> {
-  await getMap(mapId, userId);
+  const m = await getMap(mapId, userId);
+  await requireEditor(m.teamId, userId);
   await db
     .update(maps)
     .set({
@@ -115,8 +117,7 @@ export async function updateMap(mapId: string, userId: string, body: PatchMapBod
 
 export async function deleteMap(mapId: string, userId: string): Promise<void> {
   const m = await getMap(mapId, userId);
-  const role = await requireMember(m.teamId, userId);
-  if (role === "member") throw forbidden("Only team owners and admins can delete maps");
+  await requireEditor(m.teamId, userId);
   await db.delete(maps).where(eq(maps.id, mapId));
 }
 
@@ -365,10 +366,12 @@ export async function sessionLayers(sessionId: string, cells: CellId[]): Promise
     maxLat: Math.max(...bounds.map((b) => b.maxLat)),
     maxLng: Math.max(...bounds.map((b) => b.maxLng)),
   };
-  const [leads, coverage, blocks] = await Promise.all([
+  const [leads, coverage, blocks, highlights, notes] = await Promise.all([
     s.layers.includes("leads") ? mapLeads(m, bbox) : null,
     s.layers.includes("coverage") ? mapPaths(m, bbox) : null,
     s.layers.includes("leadRate") ? mapBlocks(m, bbox) : null,
+    s.layers.includes("highlights") ? queryHighlights(m.teamId, bbox) : null,
+    s.layers.includes("notes") ? queryNotes(m.teamId, bbox) : null,
   ]);
   return {
     ...(leads && { leads: leads.leads.map(({ houseId, grade, note, at }) => ({ houseId, grade, note, at })) }),
@@ -376,5 +379,7 @@ export async function sessionLayers(sessionId: string, cells: CellId[]): Promise
     ...(blocks && {
       leadRate: blocks.blocks.map(({ blockId, rate, housesWorked }) => ({ blockId, rate, housesWorked })),
     }),
+    ...(highlights && { highlights }),
+    ...(notes && { notes }),
   };
 }

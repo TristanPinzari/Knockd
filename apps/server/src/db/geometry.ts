@@ -1,6 +1,6 @@
 import { customType } from "drizzle-orm/pg-core";
 
-type GeometryType = "Point" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon";
+type GeometryType = "Point" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon" | "Geometry";
 
 /**
  * PostGIS geometry column (SRID 4326, lat/lng).

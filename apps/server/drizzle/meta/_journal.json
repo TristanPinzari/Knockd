@@ -71,6 +71,41 @@
       "when": 1795251367376,
       "tag": "0009_pin_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795269913962,
+      "tag": "0010_session_plan_column",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795269917191,
+      "tag": "0011_drop_plan_draft",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795269926936,
+      "tag": "0012_drop_plan_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795269942866,
+      "tag": "0013_team_highlights_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795269955329,
+      "tag": "0014_team_roles",
+      "breakpoints": true
     }
   ]
 }

@@ -2,14 +2,14 @@
 import { Router } from "express";
 import {
   CreateMapBody,
-  CreatePlanBody,
+  BboxQuery,
+  CreateHighlightBody,
+  CreateTeamNoteBody,
   CreateTeamBody,
   GeoBlocksQuery,
-  GetPlansQuery,
   MapLeadsQuery,
   MapQuery,
   PatchMapBody,
-  PatchPlanBody,
   WhereNextQuery,
   DateRangeQuery,
   PatchMeBody,
@@ -21,14 +21,14 @@ import {
 import { z } from "zod";
 import { accountUser, forgetUser, requireAccount } from "../../auth/account";
 import * as maps from "../../maps/service";
-import * as plans from "../../plans/service";
+import * as markings from "../../teams/markings";
 import { getTeamSession } from "../../teams/replay";
 import * as teams from "../../teams/service";
 import { parse } from "../errors";
 
 export const accountRouter = Router();
 // Only these paths need a login, so unknown /v1 routes still 404 instead of 401.
-accountRouter.use(["/me", "/teams", "/invites", "/maps", "/plans", "/geo"], requireAccount);
+accountRouter.use(["/me", "/teams", "/invites", "/maps", "/geo", "/highlights", "/notes"], requireAccount);
 
 const uid = (res: Parameters<typeof accountUser>[0]) => accountUser(res).id;
 
@@ -175,28 +175,36 @@ accountRouter.get("/geo/blocks", async (req, res) => {
   res.json(await maps.geoBlocks(bbox));
 });
 
-// ============================== Plans ==============================
+// ============================== Highlights & notes (web) ==============================
 
-accountRouter.get("/teams/:teamId/plans", async (req, res) => {
-  const { used } = parse(GetPlansQuery, req.query);
-  res.json({ plans: await plans.listPlans(parse(Uuid, req.params.teamId), uid(res), used) });
+// Everyone on the team can list them; owners and editors create and delete them.
+
+accountRouter.get("/teams/:teamId/highlights", async (req, res) => {
+  const { bbox } = parse(BboxQuery, req.query);
+  res.json({ highlights: await markings.listHighlights(parse(Uuid, req.params.teamId), uid(res), bbox) });
 });
 
-accountRouter.post("/teams/:teamId/plans", async (req, res) => {
-  const body = parse(CreatePlanBody, req.body);
-  res.status(201).json({ plan: await plans.createPlan(parse(Uuid, req.params.teamId), uid(res), body) });
+accountRouter.post("/teams/:teamId/highlights", async (req, res) => {
+  const body = parse(CreateHighlightBody, req.body);
+  res.status(201).json({ highlight: await markings.createHighlight(parse(Uuid, req.params.teamId), uid(res), body) });
 });
 
-accountRouter.get("/plans/:planId", async (req, res) => {
-  res.json({ plan: await plans.getPlan(parse(Uuid, req.params.planId), uid(res)) });
+accountRouter.delete("/highlights/:highlightId", async (req, res) => {
+  await markings.deleteHighlight(parse(Uuid, req.params.highlightId), uid(res));
+  res.status(204).end();
 });
 
-accountRouter.patch("/plans/:planId", async (req, res) => {
-  const body = parse(PatchPlanBody, req.body);
-  res.json({ plan: await plans.updatePlan(parse(Uuid, req.params.planId), uid(res), body) });
+accountRouter.get("/teams/:teamId/notes", async (req, res) => {
+  const { bbox } = parse(BboxQuery, req.query);
+  res.json({ notes: await markings.listNotes(parse(Uuid, req.params.teamId), uid(res), bbox) });
 });
 
-accountRouter.delete("/plans/:planId", async (req, res) => {
-  await plans.deletePlan(parse(Uuid, req.params.planId), uid(res));
+accountRouter.post("/teams/:teamId/notes", async (req, res) => {
+  const body = parse(CreateTeamNoteBody, req.body);
+  res.status(201).json({ note: await markings.createNote(parse(Uuid, req.params.teamId), uid(res), body) });
+});
+
+accountRouter.delete("/notes/:noteId", async (req, res) => {
+  await markings.deleteNote(parse(Uuid, req.params.noteId), uid(res));
   res.status(204).end();
 });
