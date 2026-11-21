@@ -4,7 +4,10 @@ FROM node:22-slim
 
 ENV HUSKY=0 \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
+# curl is used by Coolify's healthcheck (GET /health inside the container).
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable
 
 WORKDIR /app
 
