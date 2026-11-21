@@ -11,13 +11,20 @@ import { errorHandler, unknownRoute } from "./http/errors";
 import { accountRouter } from "./http/routes/account";
 import { sessionsRouter } from "./http/routes/sessions";
 import { logger } from "./logger";
+import { tilesRouter } from "./tiles/router";
 
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", 1); // behind Coolify's proxy in production
 
-  app.use(compression());
+  app.use(
+    compression({
+      // Vector tiles aren't on the default "compressible" list, but shrink a lot with gzip.
+      filter: (req, res) =>
+        String(res.getHeader("Content-Type") ?? "").includes("vector-tile") || compression.filter(req, res),
+    }),
+  );
   app.use(cors({ origin: corsOrigin }));
   app.use(express.json({ limit: "1mb" }));
   app.use(
@@ -34,8 +41,9 @@ export function createApp() {
     res.json({ ok: true });
   });
 
-  // Basemap for MapLibre (london.pmtiles). Supports HTTP range requests.
-  app.use("/tiles", express.static(path.resolve(env.TILES_DIR), { fallthrough: true, maxAge: "1d" }));
+  // Basemap: style.json and XYZ tiles, plus the raw london.pmtiles (HTTP range requests).
+  app.use("/tiles", tilesRouter);
+  app.use("/tiles", express.static(path.resolve(env.TILES_DIR), { maxAge: "1d" }));
 
   app.use("/v1/sessions", sessionsRouter);
   app.use("/v1", accountRouter);
