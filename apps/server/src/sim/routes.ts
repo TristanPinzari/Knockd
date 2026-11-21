@@ -46,10 +46,10 @@ export async function planRoutes(
   pace: SimPace,
   plan: PlanContent | null,
 ): Promise<Map<string, Stop[]>> {
-  // Blocks assigned to bots in the applied plan, plus blocks in the planned area.
+  // Blocks claimed for bots in the session plan, plus blocks in the planned area.
   const assigned = new Map<string, number[]>();
-  for (const g of plan?.groups ?? [])
-    for (const m of g.memberIds) if (botIds.includes(m)) assigned.set(m, [...(assigned.get(m) ?? []), ...g.blockIds]);
+  for (const c of plan?.claims ?? [])
+    if (botIds.includes(c.memberId)) assigned.set(c.memberId, [...(assigned.get(c.memberId) ?? []), c.blockId]);
   const assignedIds = [...assigned.values()].flat();
 
   const [centre] = await db.execute<{ lat: number; lng: number }>(sql`

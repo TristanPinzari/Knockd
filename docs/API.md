@@ -25,12 +25,12 @@ Send `Authorization: Bearer <token>` on every request. There are two kinds of to
 - **Account token:** an Auth0 access token. Needed for teams, maps, plans and uploads
 - **Guest token:** signed by the server and returned when creating or joining a session. Works only for that session's endpoints. Account users also get a session token when they create or join, which identifies their member in that session
 
-| Marker | Meaning                                                 |
-| ------ | ------------------------------------------------------- |
-| 🔓     | No auth                                                 |
-| 👤     | Account token                                           |
-| 🎟️     | Session token (guest or account member of that session) |
-| 🛡️     | Account token + team role (admin/owner)                 |
+| Marker | Meaning                                                                              |
+| ------ | ------------------------------------------------------------------------------------ |
+| 🔓     | No auth                                                                              |
+| 👤     | Account token                                                                        |
+| 🎟️     | Session token (guest or account member of that session)                              |
+| 🛡️     | Account token + team role: editor or owner (marked "owner" where only the owner can) |
 
 ### Format
 
@@ -94,7 +94,7 @@ Create a session. Guests can create sessions. If an Auth0 account token is sent 
   area:                                                                  // the planned area
     | { kind: "circle", center: { lat, lng }, radiusM: number }          // pin + radius (100–3000 m)
     | { kind: "polygon", polygon: GeoJSON Polygon },                     // drawn
-  loadMap?: { mapId, layers: ("leads" | "coverage" | "leadRate")[] }   // account only
+  loadMap?: { mapId, layers: ("leads" | "coverage" | "leadRate" | "highlights" | "notes")[] }   // account only
 }
 → { session, joinCode, member, token }
 ```
@@ -158,7 +158,9 @@ Loaded team data for the given cells. Empty if no map was loaded. Visible to eve
 → {
   leads?: { houseId, grade, note, at }[],  // at = last updated
   coverage?: FeatureCollection,          // same features as GET /v1/maps/:id/paths
-  leadRate?: { blockId, rate | null, housesWorked }[]   // null = not enough data
+  leadRate?: { blockId, rate | null, housesWorked }[],  // null = not enough data
+  highlights?: highlight[],                          // see Highlights & notes
+  notes?: note[],
 }
 ```
 
@@ -248,30 +250,32 @@ Everyone's GPS trail so far, for drawing trails when the app opens or reconnects
 
 ## Planning (in session)
 
-> ⚠️ **Being redesigned, don't build against this yet.** Groups, the draft/Apply step and loading library plans are going away. The new plan is one live plan of claims (block + member), routes, freehand lines and notes, each for a member or in a utility colour, plus a Suggest feature that runs on the phone. See the README's "Planning mode" and "Marking where to go" sections for the agreed design; this section will be rewritten when it's built.
+One live plan per session, edited by anyone over the socket (`plan:edit`, see Socket.io below) and broadcast to everyone as `plan:updated`. No draft or Apply step. Three ways to plan, all optional and mixable:
+
+- **Claims:** a block claimed for a member. Anyone can claim for anyone (yourself, or a teammate as organiser). Two members on one block = a pair
+- **Drawings:** `route` (draw as a dashed line with an arrow tip) or `freehand` (solid line)
+- **Notes:** short text on the map
+
+Drawings and notes are either **for a member** (`memberId`, drawn in their colour) or in a **utility colour** (`colour`): exactly one of the two is set. Every item has an `authorId` (who made it), set by the server, so "clear mine" only removes your own items.
+
+**Colours:** `PALETTE` in `@knockd/shared` has 12 colours. Members get the first free one when they join (max 8). `utilityColours(memberColours)` gives the rest, for instructions not aimed at anyone.
 
 ### `GET /v1/sessions/:id/plan` 🎟️
 
 ```ts
-→ { draft: Plan, applied: Plan | null }
-// Plan = { groups: { memberIds: string[], blockIds: string[] }[], drawings: Drawing[], notes: Note[] }
+→ { plan: PlanContent }
+// PlanContent = {
+//   claims:   { blockId, memberId, authorId }[],
+//   drawings: { id, kind: "route" | "freehand", points: { lat, lng }[], memberId | null, colour | null, authorId }[],
+//   notes:    { id, lat, lng, text, memberId | null, colour | null, authorId }[],
+// }
 ```
 
-### `POST /v1/sessions/:id/plan/apply` 🎟️
-
-The draft becomes the applied plan. Broadcasts `plan:applied`.
-
-### `POST /v1/sessions/:id/plan/load` 🎟️
-
-Load a plan from the team's library as the draft (groups keep their labels and blocks; people are assigned in the session) and mark the plan as used. Broadcasts `plan:draft`. Uses the session token only: the member must have **joined while logged in** with an account on the plan's team (`401` for guests, `404` if not on the team).
-
-```ts
-{ planId } → { draft }
-```
+The snapshot (`GET /v1/sessions/:id`) includes the same `plan`.
 
 ### `GET /v1/sessions/:id/knock-rate` 🎟️
 
-The crew's learned knock rate for on-device suggestions. Falls back to the default with no history.
+The crew's knock rate, for Suggest. Currently always the default; will be learned from team history.
 
 ```ts
 → { housesPerHourPerGroup: number, source: "history" | "default" }
@@ -281,7 +285,16 @@ The crew's learned knock rate for on-device suggestions. Falls back to the defau
 
 ## Teams
 
-> ⚠️ **Roles are changing** from owner / admin / member to **owner / editor / viewer** (see the README's "Teams and maps"). The endpoints stay the same; the role names and permissions change when it's built.
+Roles:
+
+|                                                                        | Owner | Editor | Viewer |
+| ---------------------------------------------------------------------- | ----- | ------ | ------ |
+| See maps, stats, replays, highlights, notes                            | ✓     | ✓      | ✓      |
+| Upload sessions                                                        | ✓     | ✓      | ✓      |
+| Create/delete highlights, notes and maps; remove sessions              | ✓     | ✓      |        |
+| Invite people, change roles, remove people, team settings, delete team | ✓     |        |        |
+
+People who accept an invite join as **viewers**.
 
 ### `POST /v1/teams` 👤
 
@@ -289,21 +302,21 @@ The crew's learned knock rate for on-device suggestions. Falls back to the defau
 { name } → { team }      // creator becomes owner
 ```
 
-### `GET /v1/teams/:id` 👤 · `PATCH /v1/teams/:id` 🛡️ · `DELETE /v1/teams/:id` 🛡️ (owner)
+### `GET /v1/teams/:id` 👤 · `PATCH /v1/teams/:id` 🛡️ (owner) · `DELETE /v1/teams/:id` 🛡️ (owner)
 
 ### `GET /v1/teams/:id/members` 👤
 
-### `PATCH /v1/teams/:id/members/:userId` 🛡️
+### `PATCH /v1/teams/:id/members/:userId` 🛡️ (owner)
 
 ```ts
 {
-  role: "admin" | "member";
+  role: "editor" | "viewer"; // the owner's role can't be changed
 }
 ```
 
-### `DELETE /v1/teams/:id/members/:userId` 🛡️ (or yourself, to leave)
+### `DELETE /v1/teams/:id/members/:userId` 🛡️ (owner, or yourself to leave)
 
-### `POST /v1/teams/:id/invites` 🛡️
+### `POST /v1/teams/:id/invites` 🛡️ (owner)
 
 ```ts
 → { token, url, expiresAt }
@@ -315,9 +328,9 @@ The crew's learned knock rate for on-device suggestions. Falls back to the defau
 → { team }
 ```
 
-Upload a session. You must be on the team, and have been in the session **while logged in** (created or joined it with your account token). The session must have ended (`409` if it is live). Uploading the same session twice is a no-op.
+### `POST /v1/teams/:id/sessions` 👤
 
-Upload a session. You must be on the team and have been in the session. Uploading the same session twice is a no-op.
+Upload a session. You must be on the team (any role), and have been in the session **while logged in** (created or joined it with your account token). The session must have ended (`409` if it is live). Uploading the same session twice is a no-op.
 
 ```ts
 { sessionId } → { uploaded: true, alreadyUploaded: boolean }
@@ -341,14 +354,14 @@ Removes the session from the team (and from every map).
 
 A map is a saved view over the team's **uploaded** sessions: an optional boundary and date range. Queries take `bbox=minLng,minLat,maxLng,maxLat` and an optional `asOf` timestamp for the time slider (only sessions started before it). Results are capped at 5,000 features.
 
-### `GET /v1/teams/:id/maps` 👤 · `POST /v1/teams/:id/maps` 👤
+### `GET /v1/teams/:id/maps` 👤 · `POST /v1/teams/:id/maps` 🛡️
 
 ```ts
 { name, boundary?: GeoJSON Polygon | MultiPolygon, from?, to? } → { map }   // 201
 // map = { id, teamId, name, boundary | null, from | null, to | null, createdAt }   (no boundary = whole team, e.g. "World Map")
 ```
 
-### `PATCH /v1/maps/:id` 👤 · `DELETE /v1/maps/:id` 🛡️
+### `PATCH /v1/maps/:id` 🛡️ · `DELETE /v1/maps/:id` 🛡️
 
 PATCH takes any of `{ name, boundary, from, to }`; `null` clears boundary/from/to.
 
@@ -393,25 +406,35 @@ Newest first. The client calculates visibility (duration × age) using the team'
 
 ---
 
-## Plans (library)
+## Highlights & notes (team)
 
-> ⚠️ **Being redesigned, don't build against this yet.** The plan library is being removed. The web's planning tools become team **highlights** (strokes/areas in 6 preset colours) and team **notes**, also served as session layers. See the README's "Planning mode" and "Marking where to go" sections for the agreed design; this section will be rewritten when it's built.
+The web's planning tools, like a highlighter on a map screenshot. Everyone on the team can list them; owners and editors create and delete them (on the web). Phones get them read-only through session layers (`highlights`, `notes` in `loadMap.layers`).
 
-### `GET /v1/teams/:id/plans?used=false` 👤 · `POST /v1/teams/:id/plans` 👤
+### `GET /v1/teams/:id/highlights?bbox=` 👤 · `POST /v1/teams/:id/highlights` 🛡️
 
 ```ts
-{ name, mapId?, groups: { label, blockIds }[] } → { plan }
+{ geometry: GeoJSON LineString | Polygon, colour } → { highlight }   // 201
+// LineString = a stroke along roads; Polygon = a loop around an area
+// colour: one of HIGHLIGHT_COLOURS (6 presets in @knockd/shared). No built-in meaning
+// highlight = { id, teamId, geometry, colour, createdBy: { id, displayName }, createdAt }
+// GET → { highlights: highlight[] }
 ```
 
-### `GET /v1/plans/:id` 👤 · `PATCH /v1/plans/:id` 👤 · `DELETE /v1/plans/:id` 👤
+### `DELETE /v1/highlights/:id` 🛡️
 
-- plan = `{ id, teamId, mapId | null, name, groups: { label, blockIds }[], usedInSessionId | null, createdAt, updatedAt }`
-- `?used=false` lists plans not loaded into a session yet
-- Anyone on the team can create and edit plans; the creator or an owner/admin can delete
+### `GET /v1/teams/:id/notes?bbox=` 👤 · `POST /v1/teams/:id/notes` 🛡️
+
+```ts
+{ lat, lng, text } → { note }   // 201; text max 140
+// note = { id, teamId, lat, lng, text, createdBy: { id, displayName }, createdAt }
+// GET → { notes: note[] }
+```
+
+### `DELETE /v1/notes/:id` 🛡️
 
 ### `GET /v1/geo/blocks?bbox=` 👤
 
-Blocks (FeatureCollection, properties `{ blockId, houseCount }`) for building plans on the web, outside a session.
+Blocks (FeatureCollection, properties `{ blockId, houseCount }`) in a bbox, outside a session.
 
 ---
 
@@ -481,23 +504,29 @@ Connect with `auth: { token }` (session token). The server checks it and joins t
 | `lead:removed`            | `{ clientId }`                                                                                                                                       |
 | `pin:new` / `pin:removed` | `{ pin }` / `{ clientId }`                                                                                                                           |
 | `message:new`             | `{ message }`                                                                                                                                        |
-| `plan:draft`              | `{ draft, editedBy }`                                                                                                                                |
-| `plan:applied`            | `{ plan }`                                                                                                                                           |
+| `plan:updated`            | `{ plan, editedBy }`: the whole plan after anyone's edit. Replace your copy                                                                          |
 | `session:ended`           | `{}`                                                                                                                                                 |
 | `session:processed`       | `{}` (the upload prompt can show now)                                                                                                                |
 
 ### Client → server
 
-> ⚠️ The `plan:edit` operations and the `plan:draft` / `plan:applied` events are being redesigned along with planning mode (see above).
+`plan:edit` with one of:
 
-| Event       | Payload                                                                                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plan:edit` | `{ op: "assign", blockId, groupIndex }` · `{ op: "unassign", blockId }` · `{ op: "setGroups", groups }` · `{ op: "draw", stroke }` · `{ op: "note", note }` · `{ op: "clear" }` |
+| Op           | Payload                                                              | Does                                                                  |
+| ------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `claim`      | `{ blockId, memberId }`                                              | Claim a block for a member (yourself or a teammate)                   |
+| `claimMany`  | `{ blockIds, memberId }`                                             | Claim up to 200 blocks at once                                        |
+| `unclaim`    | `{ blockId, memberId }`                                              | Remove one member's claim on a block                                  |
+| `draw`       | `{ stroke: { id, kind, points, memberId \| null, colour \| null } }` | Add a route/freehand line, or replace one with the same `id`          |
+| `erase`      | `{ drawingId }`                                                      | Remove a drawing (the eraser sends this for each line it touches)     |
+| `note`       | `{ note: { id, lat, lng, text, memberId \| null, colour \| null } }` | Add a note, or replace one with the same `id`                         |
+| `removeNote` | `{ noteId }`                                                         | Remove a note                                                         |
+| `clearMine`  | `{}`                                                                 | Remove all your own claims, drawings and notes. Teammates' items stay |
 
-Also `{ op: "erase", drawingId }` and `{ op: "removeNote", noteId }`.
-
-- Send with an acknowledgement callback: `socket.emit("plan:edit", op, (res) => ...)`. `res` is `{ ok: true }` or `{ ok: false, error }` (e.g. `"No group 9"`, or the session has ended)
-- On success everyone (including the sender) gets `plan:draft` with the full draft
-- **Instant updates:** run `applyPlanEdit(draft, op)` from `@knockd/shared` locally before the server replies. It's the exact code the server runs, so the results match. Replace with the server's `plan:draft` when it arrives
-- Edits are applied one at a time per session. If two people assign the same block at once, the last edit wins
-- Limits: 8 groups, 200 drawings (500 points each), 50 notes
+- Send with an acknowledgement callback: `socket.emit("plan:edit", op, (res) => ...)`. `res` is `{ ok: true }` or `{ ok: false, error }` (e.g. "That person isn't in this session", "Set exactly one of memberId or colour", or the session has ended)
+- On success everyone (including the sender) gets `plan:updated`
+- **Instant updates:** run `applyPlanEdit(plan, op, myMemberId)` from `@knockd/shared` locally before the server replies. It's the exact code the server runs. Replace with the server's `plan:updated` when it arrives
+- **Undo/redo** (your own actions only) is built on the phone from these ops: undo `claim` → `unclaim`, undo `draw` → `erase`, undo `note` → `removeNote`, and the reverse for redo. Keep the stroke/note to redraw it
+- Claims and drawings/notes `for` a member must name someone in the session
+- Edits are applied one at a time per session; the last edit wins
+- Limits: 1,000 claims, 200 drawings (500 points each), 50 notes

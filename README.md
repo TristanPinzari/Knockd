@@ -96,7 +96,7 @@ Walking past a street isn't the same as knocking it. Each street is classified u
 
 ### Planning mode
 
-> **Design agreed, not built yet.** The current planning API (groups, draft/Apply, plan library) is being replaced by what's described here.
+> **Backend built** (claims, routes, freehand, notes, clear-mine; see "Planning" in [docs/API.md](docs/API.md)). **Suggest is designed but not built yet.**
 
 Replaces the screenshot-and-draw huddle at the car. **One shared plan per session**, edited live by anyone, with everyone seeing changes instantly. **No groups to set up and no draft/Apply step.** It supports however a crew likes to plan: people claiming their own areas, an organiser assigning others, pairs, or just sketching routes.
 
@@ -262,7 +262,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 
 ### Marking where to go: highlights and notes
 
-> **Design agreed, not built yet.** Replaces the plan library.
+> **Backend built** (highlights, notes, session layers; see "Highlights & notes" in [docs/API.md](docs/API.md)). **The "where next?" preview/approve flow and the Gemini note are designed but not built yet.**
 
 Bosses used to send screenshots of Google Maps with highlighter marks on the areas and roads to do. The web does the same, and nothing more: planning blocks or routes ahead of time doesn't work, because time and crew size aren't known until the crew is at the car. Planning happens on the phone.
 

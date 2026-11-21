@@ -76,7 +76,7 @@ check("members → just the owner", members.json?.members?.length === 1 && membe
 const myId: string = me.json.user.id;
 check(
   "owner can't demote themselves → 403",
-  (await call("PATCH", `/v1/teams/${teamId}/members/${myId}`, { role: "member" }, token)).status === 403,
+  (await call("PATCH", `/v1/teams/${teamId}/members/${myId}`, { role: "viewer" }, token)).status === 403,
 );
 check(
   "owner can't leave → 403",

@@ -4,7 +4,6 @@ import {
   CreateSessionBody,
   GetMessagesQuery,
   JoinSessionBody,
-  LoadPlanBody,
   PatchLeadBody,
   PostLeadBody,
   PostMessageBody,
@@ -16,7 +15,6 @@ import {
 } from "@knockd/shared";
 import { maybeAccountUser, optionalAccount } from "../../auth/account";
 import { sessionLayers } from "../../maps/service";
-import * as plans from "../../plans/service";
 import * as planning from "../../sessions/planning";
 import * as sessions from "../../sessions/service";
 import { getStats } from "../../sessions/stats";
@@ -136,17 +134,6 @@ sessionsRouter.get("/:id/messages", async (req, res) => {
 
 sessionsRouter.get("/:id/plan", async (_req, res) => {
   res.json(await planning.getPlan(sessionCtx(res).sessionId));
-});
-
-sessionsRouter.post("/:id/plan/apply", async (_req, res) => {
-  res.json({ applied: await planning.applyDraft(sessionCtx(res).sessionId) });
-});
-
-// Load a plan from the team library into the draft. The member must have joined while logged in.
-sessionsRouter.post("/:id/plan/load", async (req, res) => {
-  const { sessionId, memberId } = sessionCtx(res);
-  const { planId } = parse(LoadPlanBody, req.body);
-  res.json({ draft: await plans.loadPlanIntoSession(sessionId, memberId, planId) });
 });
 
 sessionsRouter.get("/:id/knock-rate", async (_req, res) => {

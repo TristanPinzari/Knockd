@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { RefId, Uuid } from "./common";
 import type { Lead, Member, Message, Pin, PlanContent, Position } from "./entities";
-import { Drawing, Note, PlanGroup } from "./entities";
+import { DrawingInput, NoteInput } from "./entities";
 
 /** Sent as `io(url, { auth: SocketAuth })` */
 export const SocketAuth = z.object({ token: z.string() });
@@ -25,8 +25,8 @@ export interface ServerToClientEvents {
   "pin:new": (p: { pin: Pin }) => void;
   "pin:removed": (p: { clientId: string }) => void;
   "message:new": (p: { message: Message }) => void;
-  "plan:draft": (p: { draft: PlanContent; editedBy: string }) => void;
-  "plan:applied": (p: { plan: PlanContent }) => void;
+  /** The session plan changed (anyone's edit). Replace your copy. */
+  "plan:updated": (p: { plan: PlanContent; editedBy: string }) => void;
   "session:ended": () => void;
   /** The upload prompt can show now. */
   "session:processed": () => void;
@@ -35,14 +35,19 @@ export interface ServerToClientEvents {
 // ---------- Client → server ----------
 
 export const PlanEditOp = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("assign"), blockId: RefId, groupIndex: z.number().int().nonnegative() }),
-  z.object({ op: z.literal("unassign"), blockId: RefId }),
-  z.object({ op: z.literal("setGroups"), groups: z.array(PlanGroup) }),
-  z.object({ op: z.literal("draw"), stroke: Drawing }),
+  /** Claim a block for a member (yourself or a teammate). Two members on one block = a pair. */
+  z.object({ op: z.literal("claim"), blockId: RefId, memberId: Uuid }),
+  /** Claim several blocks at once for one member. */
+  z.object({ op: z.literal("claimMany"), blockIds: z.array(RefId).min(1).max(200), memberId: Uuid }),
+  z.object({ op: z.literal("unclaim"), blockId: RefId, memberId: Uuid }),
+  /** Add or replace (same id) a route or freehand line. */
+  z.object({ op: z.literal("draw"), stroke: DrawingInput }),
   z.object({ op: z.literal("erase"), drawingId: Uuid }),
-  z.object({ op: z.literal("note"), note: Note }),
+  /** Add or replace (same id) a note. */
+  z.object({ op: z.literal("note"), note: NoteInput }),
   z.object({ op: z.literal("removeNote"), noteId: Uuid }),
-  z.object({ op: z.literal("clear") }),
+  /** Remove everything you made: your claims, drawings and notes. Teammates' items stay. */
+  z.object({ op: z.literal("clearMine") }),
 ]);
 export type PlanEditOp = z.infer<typeof PlanEditOp>;
 

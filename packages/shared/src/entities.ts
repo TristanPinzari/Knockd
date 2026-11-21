@@ -1,9 +1,15 @@
+import type { LineString, Polygon } from "geojson";
 import { z } from "zod";
 import { DisplayName, Grade, GradeCounts, LatLng, PolygonGeo, RefId, Timestamp, Uuid } from "./common";
 
 // ---------- Users & teams ----------
 
-export const TeamRole = z.enum(["owner", "admin", "member"]);
+/**
+ * owner: everything, plus inviting people, changing roles, removing people, deleting the team.
+ * editor: also creates/deletes highlights, notes and maps, and removes sessions.
+ * viewer: sees everything and uploads sessions.
+ */
+export const TeamRole = z.enum(["owner", "editor", "viewer"]);
 export type TeamRole = z.infer<typeof TeamRole>;
 
 export const User = z.object({ id: Uuid, displayName: DisplayName });
@@ -29,7 +35,8 @@ export type TeamMember = z.infer<typeof TeamMember>;
 export const SessionStatus = z.enum(["live", "ended", "processed"]);
 export type SessionStatus = z.infer<typeof SessionStatus>;
 
-export const Layer = z.enum(["leads", "coverage", "leadRate"]);
+/** Team data a session can load: previous leads, past coverage, lead-rate colours, highlights, team notes. */
+export const Layer = z.enum(["leads", "coverage", "leadRate", "highlights", "notes"]);
 export type Layer = z.infer<typeof Layer>;
 
 export const MAX_SESSION_MEMBERS = 8;
@@ -110,49 +117,113 @@ export const Message = z.object({
 });
 export type Message = z.infer<typeof Message>;
 
-// ---------- Plans ----------
+// ---------- Session plan (planning mode) ----------
+//
+// One live plan per session, edited by anyone, no draft/apply. Three ways to plan, all optional:
+//   claims    pick a colour (yourself or a teammate) and tap blocks; two people on a block = a pair
+//   drawings  routes (dashed, arrow tip) or freehand lines, for a member or in a utility colour
+//   notes     short text on the map, for a member or in a utility colour
+// Every item records its author (set by the server), so "clear" only removes your own items.
 
-/** A person or pair, and the blocks they're assigned. */
-export const PlanGroup = z.object({
-  /** Shown in the plan library, e.g. "Pair 1". In a session, members are attached via memberIds. */
-  label: z.string().max(40),
-  memberIds: z.array(Uuid),
-  blockIds: z.array(RefId),
-});
-export type PlanGroup = z.infer<typeof PlanGroup>;
+/**
+ * 12 colours for people and utility. Members get the first free one when they join (max 8 per
+ * session); the rest are utility colours for instructions not aimed at anyone.
+ */
+export const PALETTE = [
+  "#E4572E",
+  "#2E86AB",
+  "#F2A541",
+  "#7B2CBF",
+  "#2A9D8F",
+  "#D81E5B",
+  "#5C946E",
+  "#3D405B",
+  "#FF7F11",
+  "#00A6FB",
+  "#8AC926",
+  "#6D4C41",
+] as const;
+export const PaletteColour = z.enum(PALETTE);
+export type PaletteColour = z.infer<typeof PaletteColour>;
 
-export const Drawing = z.object({
+/** Utility colours in a session: the palette minus members' colours. */
+export const utilityColours = (memberColours: string[]): PaletteColour[] =>
+  PALETTE.filter((c) => !memberColours.includes(c));
+
+/** For a member (drawn in their colour) or in a utility colour: exactly one is set. */
+const forWhom = { memberId: Uuid.nullable(), colour: PaletteColour.nullable() };
+const exactlyOne = (v: { memberId: string | null; colour: string | null }) =>
+  (v.memberId === null) !== (v.colour === null);
+const FOR_WHOM_MESSAGE = "Set exactly one of memberId or colour";
+
+export const Claim = z.object({ blockId: RefId, memberId: Uuid, authorId: Uuid });
+export type Claim = z.infer<typeof Claim>;
+
+const DrawingFields = z.object({
   id: Uuid,
-  kind: z.enum(["freehand", "arrow"]),
+  /** route = dashed line with an arrow tip ("go this way"); freehand = solid line */
+  kind: z.enum(["route", "freehand"]),
   points: z.array(LatLng).min(2).max(500),
-  colour: z.string(),
+  ...forWhom,
 });
+/** A drawing as sent by a client (the server adds authorId). */
+export const DrawingInput = DrawingFields.refine(exactlyOne, FOR_WHOM_MESSAGE);
+export type DrawingInput = z.infer<typeof DrawingInput>;
+export const Drawing = DrawingFields.extend({ authorId: Uuid });
 export type Drawing = z.infer<typeof Drawing>;
 
-export const Note = LatLng.extend({ id: Uuid, text: z.string().trim().min(1).max(140) });
+const NoteFields = LatLng.extend({ id: Uuid, text: z.string().trim().min(1).max(140), ...forWhom });
+/** A note as sent by a client (the server adds authorId). */
+export const NoteInput = NoteFields.refine(exactlyOne, FOR_WHOM_MESSAGE);
+export type NoteInput = z.infer<typeof NoteInput>;
+export const Note = NoteFields.extend({ authorId: Uuid });
 export type Note = z.infer<typeof Note>;
 
 export const PlanContent = z.object({
-  groups: z.array(PlanGroup),
+  claims: z.array(Claim),
   drawings: z.array(Drawing),
   notes: z.array(Note),
 });
 export type PlanContent = z.infer<typeof PlanContent>;
 
-export const EMPTY_PLAN: PlanContent = { groups: [], drawings: [], notes: [] };
+export const EMPTY_PLAN: PlanContent = { claims: [], drawings: [], notes: [] };
 
-/** A saved plan in a team's library. */
-export const LibraryPlan = z.object({
+// ---------- Team highlights & notes (web) ----------
+//
+// The web's planning tools, like a highlighter on a map screenshot: highlight areas or roads to go
+// to, and pin notes. Created and deleted on the web by owners and editors; read-only layers on phones.
+
+/** 6 highlighter colours. No built-in meaning: each team picks its own convention. */
+export const HIGHLIGHT_COLOURS = ["#FACC15", "#22C55E", "#EF4444", "#3B82F6", "#F97316", "#A855F7"] as const;
+export const HighlightColour = z.enum(HIGHLIGHT_COLOURS);
+export type HighlightColour = z.infer<typeof HighlightColour>;
+
+/** A highlighter stroke along roads (LineString) or a loop around an area (Polygon). */
+export const HighlightGeometry = z.custom<LineString | Polygon>(
+  (v) => typeof v === "object" && v !== null && ["LineString", "Polygon"].includes((v as { type?: string }).type ?? ""),
+  "Must be a GeoJSON LineString or Polygon",
+);
+
+const Author = z.object({ id: Uuid, displayName: z.string() });
+
+export const Highlight = z.object({
   id: Uuid,
   teamId: Uuid,
-  mapId: Uuid.nullable(),
-  name: z.string().trim().min(1).max(80),
-  groups: z.array(PlanGroup.omit({ memberIds: true })),
-  usedInSessionId: Uuid.nullable(),
+  geometry: HighlightGeometry,
+  colour: HighlightColour,
+  createdBy: Author,
   createdAt: Timestamp,
-  updatedAt: Timestamp,
 });
-export type LibraryPlan = z.infer<typeof LibraryPlan>;
+export type Highlight = z.infer<typeof Highlight>;
+
+export const TeamNote = LatLng.extend({
+  id: Uuid,
+  teamId: Uuid,
+  text: z.string().trim().min(1).max(140),
+  createdBy: Author,
+  createdAt: Timestamp,
+});
+export type TeamNote = z.infer<typeof TeamNote>;
 
 // ---------- Maps ----------
 

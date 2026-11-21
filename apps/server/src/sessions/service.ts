@@ -7,6 +7,7 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   cellBounds,
   EMPTY_PLAN,
+  PALETTE,
   JOIN_CODE_ALPHABET,
   MAX_SESSION_MEMBERS,
   SNAPSHOT_MESSAGE_LIMIT,
@@ -30,7 +31,8 @@ import { disconnectMember, emitToSession, isOnline } from "../realtime/io";
 import { toLead, toMessage, toPin } from "./dto";
 
 /** Distinct, colour-blind-friendly-ish member colours, assigned in order. */
-const MEMBER_COLOURS = ["#E4572E", "#2E86AB", "#F2A541", "#7B2CBF", "#2A9D8F", "#D81E5B", "#5C946E", "#3D405B"];
+/** Members get the first free colour from the shared 12-colour palette; the rest are utility colours. */
+const MEMBER_COLOURS: readonly string[] = PALETTE;
 const MAX_DRAWN_AREA_KM2 = 30;
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
@@ -65,7 +67,7 @@ export async function createSession(body: CreateSessionBody, userId?: string): P
           .values({ sessionId: session!.id, userId, displayName: body.displayName, colour: MEMBER_COLOURS[0]! })
           .returning({ id: sessionMembers.id });
         await tx.update(sessions).set({ createdByMemberId: member!.id }).where(eq(sessions.id, session!.id));
-        await tx.insert(sessionPlans).values({ sessionId: session!.id, draft: EMPTY_PLAN });
+        await tx.insert(sessionPlans).values({ sessionId: session!.id, plan: EMPTY_PLAN });
         return { sessionId: session!.id, memberId: member!.id };
       });
       return await accessResponse(sessionId, memberId);
@@ -187,7 +189,7 @@ export async function getSnapshot(sessionId: string): Promise<SessionSnapshotRes
     members,
     leads: leadRows.map(toLead),
     pins: pinRows.map(toPin),
-    plan: { draft: plan[0]?.draft ?? EMPTY_PLAN, applied: plan[0]?.applied ?? null },
+    plan: plan[0]?.plan ?? EMPTY_PLAN,
     messages: messageRows.reverse().map(toMessage),
   };
 }

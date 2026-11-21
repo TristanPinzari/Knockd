@@ -1,5 +1,5 @@
 /**
- * Smoke test for team maps, the plan library and loading team data into a session.
+ * Smoke test for team maps, highlights and notes, and loading team data into a session.
  * Walks a real Byron street in one session, uploads it, then queries it back every way the
  * web map and sessions do. Logs in as the Auth0 smoke test app (see smoke-accounts.ts).
  * Usage: pnpm --filter @knockd/server smoke:maps [baseUrl]
@@ -7,7 +7,7 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { io } from "socket.io-client";
-import { cellsAround, type LatLng, type Ping, type SessionAccessRes } from "@knockd/shared";
+import { cellsAround, HIGHLIGHT_COLOURS, type LatLng, type Ping, type SessionAccessRes } from "@knockd/shared";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 const BASE = process.argv[2] ?? "http://localhost:3000";
@@ -223,30 +223,66 @@ check(
   `top: block ${sugg[0]?.blockId}, income $${sugg[0]?.medianIncome}`,
 );
 
-// ---------- plan library ----------
+// ---------- highlights & notes (web) ----------
 const geo = await call("GET", `/v1/geo/blocks?bbox=${BYRON_BBOX}`, undefined, token);
-const blockIds: number[] = geo.json.features
-  .slice(0, 4)
-  .map((f: { properties: { blockId: number } }) => f.properties.blockId);
-check("geo blocks for the plan builder", blockIds.length === 4, `${geo.json.features.length} blocks in Byron`);
-const plan = await call(
-  "POST",
-  `/v1/teams/${teamId}/plans`,
-  {
-    name: "Tuesday: Byron north",
-    mapId: byron.json.map.id,
-    groups: [
-      { label: "Pair 1", blockIds: blockIds.slice(0, 2) },
-      { label: "Pair 2", blockIds: blockIds.slice(2) },
+check("geo blocks in Byron", geo.json?.features?.length > 0, `${geo.json?.features?.length} blocks`);
+const road = {
+  type: "LineString",
+  coordinates: [
+    [CENTRE.lng, CENTRE.lat],
+    [CENTRE.lng + 0.002, CENTRE.lat + 0.0005],
+  ],
+};
+const loop = {
+  type: "Polygon",
+  coordinates: [
+    [
+      [CENTRE.lng - 0.002, CENTRE.lat - 0.001],
+      [CENTRE.lng + 0.002, CENTRE.lat - 0.001],
+      [CENTRE.lng + 0.002, CENTRE.lat + 0.001],
+      [CENTRE.lng - 0.002, CENTRE.lat + 0.001],
+      [CENTRE.lng - 0.002, CENTRE.lat - 0.001],
     ],
-  },
+  ],
+};
+const h1 = await call(
+  "POST",
+  `/v1/teams/${teamId}/highlights`,
+  { geometry: road, colour: HIGHLIGHT_COLOURS[0] },
   token,
 );
-const planId: string = plan.json?.plan?.id;
-check("create a plan", plan.status === 201 && plan.json.plan.groups.length === 2);
+const h2 = await call(
+  "POST",
+  `/v1/teams/${teamId}/highlights`,
+  { geometry: loop, colour: HIGHLIGHT_COLOURS[2] },
+  token,
+);
 check(
-  "plan list (unused) has it",
-  (await call("GET", `/v1/teams/${teamId}/plans?used=false`, undefined, token)).json?.plans?.length === 1,
+  "highlight a road (line) and an area (loop)",
+  h1.status === 201 &&
+    h2.json?.highlight?.geometry?.type === "Polygon" &&
+    h2.json.highlight.colour === HIGHLIGHT_COLOURS[2],
+);
+const badColour = await call("POST", `/v1/teams/${teamId}/highlights`, { geometry: road, colour: "#123456" }, token);
+check("a colour outside the 6 presets → 400", badColour.status === 400);
+const note = await call(
+  "POST",
+  `/v1/teams/${teamId}/notes`,
+  { lat: CENTRE.lat, lng: CENTRE.lng, text: "New owners moved in this summer" },
+  token,
+);
+check("pin a team note", note.status === 201 && note.json?.note?.createdBy?.displayName === "Smoke Bot");
+const listed = await call("GET", `/v1/teams/${teamId}/highlights?bbox=${BYRON_BBOX}`, undefined, token);
+const listedNotes = await call("GET", `/v1/teams/${teamId}/notes?bbox=${BYRON_BBOX}`, undefined, token);
+check(
+  "list highlights and notes in a bbox",
+  listed.json?.highlights?.length === 2 && listedNotes.json?.notes?.length === 1,
+);
+check(
+  "delete a highlight",
+  (await call("DELETE", `/v1/highlights/${h1.json.highlight.id}`, undefined, token)).status === 204 &&
+    (await call("GET", `/v1/teams/${teamId}/highlights?bbox=${BYRON_BBOX}`, undefined, token)).json?.highlights
+      ?.length === 1,
 );
 
 // ---------- a new session with team data loaded ----------
@@ -257,7 +293,7 @@ const s2 = await call(
     displayName: "Mapper",
     location: CENTRE,
     area,
-    loadMap: { mapId: world.json.map.id, layers: ["leads", "coverage", "leadRate"] },
+    loadMap: { mapId: world.json.map.id, layers: ["leads", "coverage", "leadRate", "highlights", "notes"] },
   },
   token,
 );
@@ -268,18 +304,13 @@ check(
 const S2 = `/v1/sessions/${s2.json.session.id}`;
 const layers = await call("GET", `${S2}/layers?cells=${cellsAround(CENTRE).join(",")}`, undefined, s2.json.token);
 check(
-  "layers: previous lead (with note), past coverage, lead-rate colours",
+  "layers: previous lead (with note), past coverage, lead-rate colours, highlights, team notes",
   layers.json?.leads?.[0]?.note === "loved our work" &&
     layers.json?.coverage?.features?.length >= 1 &&
-    layers.json?.leadRate?.length >= 1,
+    layers.json?.leadRate?.length >= 1 &&
+    layers.json?.highlights?.length === 1 &&
+    layers.json?.notes?.[0]?.text === "New owners moved in this summer",
 );
-const loaded = await call("POST", `${S2}/plan/load`, { planId }, s2.json.token);
-check("load the plan into the session's draft", loaded.json?.draft?.groups?.[1]?.label === "Pair 2");
-check(
-  "plan is now marked used",
-  (await call("GET", `/v1/teams/${teamId}/plans?used=true`, undefined, token)).json?.plans?.length === 1,
-);
-
 const guest = (await call("POST", "/v1/sessions", { displayName: "Guest", location: CENTRE, area }))
   .json as SessionAccessRes;
 const G = `/v1/sessions/${guest.session.id}`;
@@ -287,10 +318,6 @@ check(
   "guest session: no team layers",
   JSON.stringify((await call("GET", `${G}/layers?cells=${cellsAround(CENTRE)[0]}`, undefined, guest.token)).json) ===
     "{}",
-);
-check(
-  "guest can't load a team plan → 401",
-  (await call("POST", `${G}/plan/load`, { planId }, guest.token)).status === 401,
 );
 check(
   "loading a map you can't see → 404",
@@ -307,7 +334,7 @@ check(
 // ---------- cleanup ----------
 for (const s of [S2, G]) await call("POST", `${s}/end`, undefined, s === G ? guest.token : s2.json.token);
 check(
-  "delete the team (maps, plans, uploads go with it)",
+  "delete the team (maps, highlights, notes, uploads go with it)",
   (await call("DELETE", `/v1/teams/${teamId}`, undefined, token)).status === 204,
 );
 

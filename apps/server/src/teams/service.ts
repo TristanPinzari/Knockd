@@ -1,7 +1,9 @@
 /**
  * Teams: members and roles, invite links, and uploading sessions.
- * Roles: owner (one per team) > admin > member. Owners and admins manage members and invites;
- * everyone on the team can view, upload and make plans.
+ * Roles:
+ *   owner   one per team. Everything, plus invites, roles, removing people, team settings, deleting
+ *   editor  also creates/deletes highlights, notes and maps, and removes sessions
+ *   viewer  sees everything and uploads sessions
  */
 import { randomBytes } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -42,10 +44,16 @@ export async function requireMember(teamId: string, userId: string): Promise<Tea
   return m.role;
 }
 
-async function requireAdmin(teamId: string, userId: string): Promise<TeamRole> {
+/** Owners and editors. */
+export async function requireEditor(teamId: string, userId: string): Promise<TeamRole> {
   const role = await requireMember(teamId, userId);
-  if (role === "member") throw forbidden("Only team owners and admins can do that");
+  if (role === "viewer") throw forbidden("Only team owners and editors can do that");
   return role;
+}
+
+export async function requireOwner(teamId: string, userId: string): Promise<void> {
+  const role = await requireMember(teamId, userId);
+  if (role !== "owner") throw forbidden("Only the team owner can do that");
 }
 
 // ============================== Me ==============================
@@ -118,7 +126,7 @@ export async function getTeam(teamId: string, userId: string): Promise<Team> {
 }
 
 export async function updateTeam(teamId: string, userId: string, body: PatchTeamBody): Promise<Team> {
-  await requireAdmin(teamId, userId);
+  await requireOwner(teamId, userId);
   const [team] = await db
     .update(teams)
     .set({ ...(body.name && { name: body.name }), ...(body.fadeDays && { fadeDays: body.fadeDays }) })
@@ -128,9 +136,8 @@ export async function updateTeam(teamId: string, userId: string, body: PatchTeam
 }
 
 export async function deleteTeam(teamId: string, userId: string): Promise<void> {
-  const role = await requireMember(teamId, userId);
-  if (role !== "owner") throw forbidden("Only the team owner can delete the team");
-  // Cascades to members, invites, maps, plans and uploads. Sessions themselves are kept
+  await requireOwner(teamId, userId);
+  // Cascades to members, invites, maps, highlights, notes and uploads. Sessions themselves are kept
   // (other teams may have them); un-uploaded ones are cleaned up after 7 days.
   await db.delete(teams).where(eq(teams.id, teamId));
 }
@@ -152,8 +159,9 @@ export async function listMembers(teamId: string, userId: string): Promise<TeamM
   }));
 }
 
-export async function setMemberRole(teamId: string, userId: string, targetId: string, role: "admin" | "member") {
-  await requireAdmin(teamId, userId);
+/** Owner only. */
+export async function setMemberRole(teamId: string, userId: string, targetId: string, role: "editor" | "viewer") {
+  await requireOwner(teamId, userId);
   const targetRole = await requireMember(teamId, targetId).catch(() => {
     throw notFound("Not a member of this team");
   });
@@ -164,25 +172,22 @@ export async function setMemberRole(teamId: string, userId: string, targetId: st
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, targetId)));
 }
 
-/** Admins remove others; anyone except the owner can remove themselves (leave). */
+/** The owner removes others; anyone except the owner can remove themselves (leave). */
 export async function removeMember(teamId: string, userId: string, targetId: string): Promise<void> {
   const myRole = await requireMember(teamId, userId);
   const targetRole = await requireMember(teamId, targetId).catch(() => {
     throw notFound("Not a member of this team");
   });
   if (targetRole === "owner") throw forbidden("The owner can't leave or be removed. Delete the team instead");
-  if (targetId !== userId) {
-    if (myRole === "member") throw forbidden("Only team owners and admins can remove members");
-    if (targetRole === "admin" && myRole !== "owner") throw forbidden("Only the owner can remove an admin");
-  }
+  if (targetId !== userId && myRole !== "owner") throw forbidden("Only the team owner can remove people");
   await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, targetId)));
 }
 
 // ============================== Invites ==============================
 
-/** A reusable link, valid for 7 days. */
+/** Owner only. A reusable link, valid for 7 days. People who accept join as viewers. */
 export async function createInvite(teamId: string, userId: string): Promise<CreateInviteRes> {
-  await requireAdmin(teamId, userId);
+  await requireOwner(teamId, userId);
   const token = randomBytes(18).toString("base64url");
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000);
   await db.insert(teamInvites).values({ token, teamId, createdBy: userId, expiresAt });
@@ -193,7 +198,7 @@ export async function acceptInvite(token: string, userId: string): Promise<Team>
   const [invite] = await db.select().from(teamInvites).where(eq(teamInvites.token, token));
   if (!invite) throw notFound("Invite not found");
   if (invite.expiresAt < new Date()) throw new HttpError(410, "conflict", "This invite has expired");
-  await db.insert(teamMembers).values({ teamId: invite.teamId, userId, role: "member" }).onConflictDoNothing();
+  await db.insert(teamMembers).values({ teamId: invite.teamId, userId, role: "viewer" }).onConflictDoNothing();
   const [team] = await db.select().from(teams).where(eq(teams.id, invite.teamId));
   if (!team) throw notFound("Team not found");
   return toTeam(team);
@@ -224,7 +229,7 @@ export async function uploadSession(teamId: string, userId: string, sessionId: s
 }
 
 export async function removeTeamSession(teamId: string, userId: string, sessionId: string): Promise<void> {
-  await requireAdmin(teamId, userId);
+  await requireEditor(teamId, userId);
   const deleted = await db
     .delete(teamSessions)
     .where(and(eq(teamSessions.teamId, teamId), eq(teamSessions.sessionId, sessionId)))

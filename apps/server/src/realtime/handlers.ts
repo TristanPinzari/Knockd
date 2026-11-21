@@ -2,7 +2,7 @@
 import { PlanEditOp } from "@knockd/shared";
 import { HttpError } from "../http/errors";
 import { logger } from "../logger";
-import { editDraft } from "../sessions/planning";
+import { editPlan } from "../sessions/planning";
 import type { KnockdSocket } from "./io";
 
 export function registerHandlers(socket: KnockdSocket): void {
@@ -15,7 +15,7 @@ export function registerHandlers(socket: KnockdSocket): void {
       return;
     }
     try {
-      await editDraft(sessionId, memberId, op.data);
+      await editPlan(sessionId, memberId, op.data);
       ack?.({ ok: true });
     } catch (err) {
       if (!(err instanceof HttpError)) logger.error({ err, sessionId }, "plan:edit failed");
