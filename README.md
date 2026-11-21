@@ -264,7 +264,9 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 
 Every existing app (SPOTIO, SalesRabbit, Knockio, Timeero, etc.) is built manager-down. A boss watches reps from a dashboard. They're CRM-first, $15–50/user/month, and overkill for a small informal crew.
 
-This is peer-to-peer. Teammates see each other, not a manager seeing subordinates. The target user is a 3-person painting crew or summer sales team, not a 50-rep enterprise sales org. Free or near-free pricing.
+This is peer-to-peer. Teammates see each other, not a manager seeing subordinates. The target user is a 3–4 person painting or roofing crew, not a 50-rep enterprise sales org. Free or near-free pricing.
+
+**Zero data entry.** Other tools depend on someone marking doors and drawing territories after a long day, which crews don't do. In Knockd the team's history is a by-product of working: GPS trails become worked/passed streets automatically, and the only tap is when there's a lead.
 
 ## Platform Requirement
 
@@ -277,7 +279,16 @@ This is peer-to-peer. Teammates see each other, not a manager seeing subordinate
 
 ## Market
 
-Validated market (D2D software is a real category) but the lightweight peer-coordination niche is unserved. Target users: summer sales crews, painting companies, fundraising canvassers, political canvassing teams, small field sales teams. All informal, price-sensitive, coordination-heavy.
+Validated market (D2D software is a real category) but the lightweight peer-coordination niche is unserved.
+
+**Subscription vs project businesses.** Door-to-door looks different depending on what's being sold:
+
+- **Subscription businesses** (internet, TV, home security, e.g. Rogers): once a house signs up it stays a customer for years, and the company knows exactly who its customers are from billing. Door-to-door is about individual households: knock non-customers, skip customers, win back cancellations. A manager assigns specific houses to reps. This is what SalesRabbit and similar tools are built for
+- **Project businesses** (painting, roofing, windows, siding, landscaping, e.g. High Five Painting): a job is done and the relationship ends. The need comes back on its own timeline (paint peels, a storm hits, a house is sold), and no database says which house needs work now. Door-to-door is about **areas over time**: when did we last knock this neighbourhood, what happened, and is it time to go back? Re-knocking every few months is the strategy
+
+Knockd is built for the second kind: trails that fade with age, "hit X time ago", "where next?" ranked by time since last knocked, block lead rates, and previous leads as references. It also explains why marking areas on Google Maps never stuck: what matters is _when_ an area was covered, and a shape on a map doesn't age (and nobody wants to draw them after a long day).
+
+**Target users:** crews in project-based home services (painting, roofing, windows, siding, landscaping), plus canvassing teams (fundraising, political) that also cycle through neighbourhoods. All informal, price-sensitive, coordination-heavy.
 
 **Pricing:** the mobile app (live sessions) is free. Teams, team maps and the web app are paid. No paywall for the hackathon.
 
