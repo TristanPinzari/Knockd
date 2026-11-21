@@ -1,6 +1,7 @@
 # Knockd — Door-to-Door Team Coordination App
 
 This README covers the project scope. Technical docs:
+
 - [Backend](docs/BACKEND.md): stack, architecture, data model, deployment
 - [API](docs/API.md): REST endpoints and socket events
 - [Mobile](docs/MOBILE.md): mobile app (Jasmine)
@@ -23,10 +24,12 @@ Small door-to-door sales crews (2–6 people) have no good way to coordinate in 
 A lightweight, session-based map app for crews doing door-to-door work. No CRM, no manager dashboards, no enterprise pricing — just a shared live map that answers "where is everyone and what have they covered?"
 
 It has two parts:
+
 - **Mobile app (Phase 1, priority):** runs the day in the field: planning, live map, coverage
 - **Web app (Phase 2):** post-session analysis and area planning across weeks and months
 
 **Core loop:**
+
 1. Crew pulls up to an area
 2. One person creates a session, shares a code
 3. Everyone joins — each person appears as a different colored dot on the map
@@ -42,28 +45,35 @@ It has two parts:
 The mobile app is focused on **today**: the live session, the plan, and the stats. Analysis of history belongs in the web app. The one exception is team data the session creator chooses to load (see "Loading team data into a session").
 
 ### Sessions
+
 - Create a session and share a join code. Joining needs no account, just a name
 - Session ends when the creator ends it or at the end of the day
 
 ### Live map
+
 - Each teammate is a coloured dot with a trail behind them
 - Group chat
 - "Heading here" pins to mark a specific point
 
 ### Worked vs passed-by streets
+
 Walking past a street isn't the same as knocking it. Each street is classified using the GPS timestamps:
+
 - **Worked:** slow movement with stops (roughly 1–3 km/h average, measured as minutes spent per 100m of street). Painted in solid colour
 - **Passed by:** steady walking or driving through. Shown as a thin, faint line
 - Driving never counts. Only worked streets count toward coverage
 - A street is treated as one unit. GPS (±5–10m) can't reliably tell which side of the street was done
 
 ### Blocks
+
 - A block is an area enclosed by roads: the "big rectangle" of houses crews actually work one at a time
 - Blocks are generated automatically from map data, and every house in a block is known from open building outline data
 - Blocks are the unit for selecting, assigning and measuring coverage. Each block knows its house count, and its coverage is the % of its streets that were worked
 
 ### Planning mode
+
 Replaces screenshot-and-draw. A shared planning screen inside the session:
+
 - Everyone in the huddle sees it live on their own phone
 - Draw freehand, tap blocks to assign them to a person or pair, add arrows or short notes
 - Changes stay a draft until someone taps **Apply**, then it becomes the shared map everyone works from
@@ -77,12 +87,15 @@ Replaces screenshot-and-draw. A shared planning screen inside the session:
 - An optional server API can add heavier work later, like real walking routes through each chunk
 
 ### Leads
+
 Crews selling things like painting or roofing rarely make a sale at the door. The goal is a lead: the homeowner's number and interest, so the company can call back to book a quote. Leads are graded by the person who got them:
+
 - **A:** wants it done now and is ready to work with the company. The best case
 - **B:** wants it later, but not too far off (within about a year)
 - **C:** no particular interest, but their number is useful for automated calls and texts
 
 How it works in the app:
+
 - Every house is assumed no lead. No need to keep the app open to log each door
 - **Long-press a house → tap A, B or C** (not double-tap, which zooms the map), with a quick undo
 - **The app records only the grade**, not names or phone numbers. Contact details go in whatever form or CRM the company already uses. Knockd is for coordination and geography, not a CRM
@@ -90,14 +103,18 @@ How it works in the app:
 - **Leaderboard:** a small in-session leaderboard of leads per person, by grade
 
 ### End-of-day stats
+
 Plain stats, per person and for the crew: streets worked vs passed, blocks completed, houses covered, leads by grade, distance, active time.
 
 ### Uploading to a team
+
 - At the end of a session, everyone in it who's on a team gets a prompt listing their teams: "Add to London Painters?"
 - Plans from the team's plan library can be loaded into planning mode as a starting point (see Web App)
 
 ### Loading team data into a session
+
 Crews use previous leads nearby as references ("we just did a quote for the place down the street"). So a session can show data from a team map:
+
 - When creating a session, a creator with an account can pick one of their team maps (e.g. London D2D) and choose which data to load:
   - **Previous leads:** houses graded in past sessions, with grade and how long ago. On by default, filterable by grade (e.g. A only)
   - **Past coverage:** "hit X time ago" paths, with the same fading as the web map
@@ -108,21 +125,25 @@ Crews use previous leads nearby as references ("we just did a quote for the plac
 - **Everyone in the session sees loaded data**, including guests
 - Each person can toggle each layer on or off on their own phone, so the map doesn't get cluttered
 - Off by default, so the live map stays focused on today unless the creator loads something
-- *Nice to have:* planning suggestions that prefer blocks near previous leads
+- _Nice to have:_ planning suggestions that prefer blocks near previous leads
 
 ### Offline
+
 - GPS points, leads and planning changes are stored on the phone, each with a unique ID
 - Sent when the connection comes back. The server ignores duplicates
 - Worked/passed-by classification uses the GPS timestamps, so delayed uploads don't affect it
 
 ### Battery
+
 The app runs for a whole shift and crews can't charge mid-job, so battery use is a top priority:
+
 - Record location only after moving about 10m, and let the OS pause GPS when standing still
 - Send updates in batches every 15–30 seconds instead of on every reading
 - Everything works with the screen off, in the background
 - Measure battery use per hour on a real test walk early on
 
 ### Demo
+
 - **Simulated crew mode:** fake teammates walking scripted routes over a real neighbourhood, so the demo isn't a few dots sitting still indoors
 
 ## Web App (Phase 2)
@@ -132,6 +153,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 **Who it's for:** anyone coordinating door-to-door sessions: the owner, a crew lead, or the whole team looking at the map together. Everything is shared within a team.
 
 ### Teams and maps
+
 - Anyone can create a team and invite others by link. Once someone joins, they can see all of the team's maps
 - Sessions are uploaded **once to the team**, not to a specific map
 - **Maps are saved views** of the team's data: a name plus an area boundary and/or filters
@@ -144,12 +166,15 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - **Roles:** owner/admin invites people and can remove sessions. Members can view, upload and make plans
 
 ### How the map is drawn
+
 **Paths show effort and recency.** Each session's paths are drawn as their own translucent lines, with visibility = duration × age:
+
 - **Duration:** a drive-by is barely noticeable. Around 30+ minutes on a street is clearly solid
 - **Age:** a multiplier that fades paths over an adjustable fade time (default 4 months). After that, old work stays just barely visible
 - Repeat visits stack, so a street worked three times looks darker than one worked once
 
 **Block colour shows lead rate** ((A + B leads) ÷ houses worked):
+
 - 🟢 Green: lots of A/B leads, good money-making houses
 - 🟡 Yellow: average
 - 🔴 Red: no A/B leads
@@ -158,6 +183,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - The colour scale changes in lightness as well as hue, so it still reads for colour-blind users
 
 ### Core features
+
 - **Time slider:** replay how the territory filled in ("show the map as of 3 weeks ago")
 - **Filters:** date range, crew, neighbourhood
 - **Stats:** coverage, houses worked, distance, leads by grade, and **lead rate** = (A + B leads) ÷ houses worked, per session or per area
@@ -167,6 +193,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - **Previous paths and session history:** replay any past session and see which streets each person walked
 
 ### Nice to have
+
 - Demographics overlay (income, homeownership, home age, density) and demographics compared with lead rate
 - Smarter "where next?" that also uses past lead rate
 - Best time to knock, by hour (5–8pm is already the established default)
@@ -210,6 +237,7 @@ Validated market (D2D software is a real category) but the lightweight peer-coor
 ## Hackathon
 
 **Prizes we're targeting:**
+
 - 1st/2nd/3rd Overall
 - Most Adventurous ("discover the unknown"): the map shows where the crew hasn't been yet
 - Best Use of Tiger Data: hypertables for GPS pings, PostGIS for streets and blocks, continuous aggregates for stats
@@ -222,11 +250,13 @@ Validated market (D2D software is a real category) but the lightweight peer-coor
 Check how many prize tracks one project can enter.
 
 **Who does what:**
+
 - Tristan: backend (server, database, map matching, deployment)
 - Jasmine: mobile app
 - Web app: split once those are done
 
 **Priorities:**
+
 1. Mobile: sessions, live map, worked vs passed-by streets, blocks, A/B/C leads, planning mode, simulated crew mode
 2. Server and database on Vultr + Tiger Data, with uploads to teams
 3. Web: team map with paths and lead-rate colours, time slider, stats

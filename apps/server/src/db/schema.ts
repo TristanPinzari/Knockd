@@ -50,15 +50,21 @@ export const teams = pgTable("teams", {
   name: text("name").notNull(),
   /** How long paths take to fade on the map. Default ~4 months. */
   fadeDays: integer("fade_days").notNull().default(120),
-  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
   createdAt: createdAt(),
 });
 
 export const teamMembers = pgTable(
   "team_members",
   {
-    teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
-    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     role: teamRole("role").notNull().default("member"),
     joinedAt: ts("joined_at").notNull().defaultNow(),
   },
@@ -67,8 +73,12 @@ export const teamMembers = pgTable(
 
 export const teamInvites = pgTable("team_invites", {
   token: text("token").primaryKey(),
-  teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
-  createdBy: uuid("created_by").notNull().references(() => users.id),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id),
   expiresAt: ts("expires_at").notNull(),
   createdAt: createdAt(),
 });
@@ -78,13 +88,17 @@ export const maps = pgTable(
   "maps",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     /** null = no boundary (e.g. "World Map") */
     boundary: geometry("boundary", "MultiPolygon"),
     fromDate: ts("from_date"),
     toDate: ts("to_date"),
-    createdBy: uuid("created_by").notNull().references(() => users.id),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
     createdAt: createdAt(),
   },
   (t) => [index("maps_team_idx").on(t.teamId)],
@@ -95,12 +109,16 @@ export const plans = pgTable(
   "plans",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
     mapId: uuid("map_id").references(() => maps.id, { onDelete: "set null" }),
     name: text("name").notNull(),
     groups: jsonb("groups").$type<Omit<PlanGroup, "memberIds">[]>().notNull(),
     usedInSessionId: uuid("used_in_session_id").references(() => sessions.id, { onDelete: "set null" }),
-    createdBy: uuid("created_by").notNull().references(() => users.id),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
     createdAt: createdAt(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
@@ -122,11 +140,17 @@ export const sessions = pgTable(
     startedAt: ts("started_at").notNull().defaultNow(),
     endedAt: ts("ended_at"),
     loadedMapId: uuid("loaded_map_id").references(() => maps.id, { onDelete: "set null" }),
-    loadedLayers: text("loaded_layers").array().$type<Layer[]>().notNull().default(sql`'{}'::text[]`),
+    loadedLayers: text("loaded_layers")
+      .array()
+      .$type<Layer[]>()
+      .notNull()
+      .default(sql`'{}'::text[]`),
   },
   (t) => [
     // Codes only need to be unique among live sessions, so they can be reused later.
-    uniqueIndex("sessions_live_join_code_idx").on(t.joinCode).where(sql`${t.status} = 'live'`),
+    uniqueIndex("sessions_live_join_code_idx")
+      .on(t.joinCode)
+      .where(sql`${t.status} = 'live'`),
     index("sessions_started_at_idx").on(t.startedAt),
   ],
 );
@@ -135,7 +159,9 @@ export const sessions = pgTable(
 export const sessionCells = pgTable(
   "session_cells",
   {
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
     cellId: text("cell_id").notNull(),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.cellId] })],
@@ -145,7 +171,9 @@ export const sessionMembers = pgTable(
   "session_members",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
     /** null for guests and bots */
     userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     displayName: text("display_name").notNull(),
@@ -166,8 +194,12 @@ export const pings = pgTable(
   "pings",
   {
     time: ts("time").notNull(),
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    memberId: uuid("member_id").notNull().references(() => sessionMembers.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => sessionMembers.id, { onDelete: "cascade" }),
     clientId: uuid("client_id").notNull(),
     location: geometry("location", "Point").notNull(),
     accuracyM: real("accuracy_m").notNull(),
@@ -183,9 +215,15 @@ export const leads = pgTable(
   "leads",
   {
     id: uuid("id").primaryKey(),
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    memberId: uuid("member_id").notNull().references(() => sessionMembers.id, { onDelete: "cascade" }),
-    houseId: bigint("house_id", { mode: "number" }).notNull().references(() => houses.id),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => sessionMembers.id, { onDelete: "cascade" }),
+    houseId: bigint("house_id", { mode: "number" })
+      .notNull()
+      .references(() => houses.id),
     grade: leadGrade("grade").notNull(),
     createdAt: createdAt(),
     /** Set on undo. */
@@ -198,8 +236,12 @@ export const pins = pgTable(
   "pins",
   {
     id: uuid("id").primaryKey(),
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    memberId: uuid("member_id").notNull().references(() => sessionMembers.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => sessionMembers.id, { onDelete: "cascade" }),
     location: geometry("location", "Point").notNull(),
     createdAt: createdAt(),
     deletedAt: ts("deleted_at"),
@@ -211,8 +253,12 @@ export const chatMessages = pgTable(
   "chat_messages",
   {
     id: uuid("id").primaryKey(),
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    memberId: uuid("member_id").notNull().references(() => sessionMembers.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => sessionMembers.id, { onDelete: "cascade" }),
     body: text("body").notNull(),
     createdAt: createdAt(),
   },
@@ -233,8 +279,12 @@ export const sessionPlans = pgTable("session_plans", {
 export const sessionPaths = pgTable(
   "session_paths",
   {
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    memberId: uuid("member_id").notNull().references(() => sessionMembers.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => sessionMembers.id, { onDelete: "cascade" }),
     path: geometry("path", "MultiLineString").notNull(),
     distanceM: real("distance_m").notNull(),
   },
@@ -244,9 +294,15 @@ export const sessionPaths = pgTable(
 export const sessionStreetCoverage = pgTable(
   "session_street_coverage",
   {
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    memberId: uuid("member_id").notNull().references(() => sessionMembers.id, { onDelete: "cascade" }),
-    streetId: bigint("street_id", { mode: "number" }).notNull().references(() => streets.id),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => sessionMembers.id, { onDelete: "cascade" }),
+    streetId: bigint("street_id", { mode: "number" })
+      .notNull()
+      .references(() => streets.id),
     durationS: integer("duration_s").notNull(),
     classification: streetClassification("classification").notNull(),
     firstSeen: ts("first_seen").notNull(),
@@ -261,8 +317,12 @@ export const sessionStreetCoverage = pgTable(
 export const sessionBlockStats = pgTable(
   "session_block_stats",
   {
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    blockId: bigint("block_id", { mode: "number" }).notNull().references(() => blocks.id),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    blockId: bigint("block_id", { mode: "number" })
+      .notNull()
+      .references(() => blocks.id),
     housesWorked: integer("houses_worked").notNull(),
     leadsA: integer("leads_a").notNull().default(0),
     leadsB: integer("leads_b").notNull().default(0),
@@ -276,9 +336,15 @@ export const sessionBlockStats = pgTable(
 export const teamSessions = pgTable(
   "team_sessions",
   {
-    teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
-    sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
-    uploadedBy: uuid("uploaded_by").notNull().references(() => users.id),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    uploadedBy: uuid("uploaded_by")
+      .notNull()
+      .references(() => users.id),
     uploadedAt: ts("uploaded_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.teamId, t.sessionId] }), index("team_sessions_session_idx").on(t.sessionId)],

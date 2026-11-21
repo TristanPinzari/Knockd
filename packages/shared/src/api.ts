@@ -343,7 +343,12 @@ export type WhereNextRes = z.infer<typeof WhereNextRes>;
 
 const LibraryGroup = PlanGroup.omit({ memberIds: true });
 
-export const GetPlansQuery = z.object({ used: z.enum(["true", "false"]).transform((v) => v === "true").optional() });
+export const GetPlansQuery = z.object({
+  used: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
+});
 export type GetPlansQuery = z.infer<typeof GetPlansQuery>;
 export const GetPlansRes = z.object({ plans: z.array(LibraryPlan) });
 export type GetPlansRes = z.infer<typeof GetPlansRes>;
