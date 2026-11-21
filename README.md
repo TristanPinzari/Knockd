@@ -126,7 +126,8 @@ Replaces the screenshot-and-draw huddle at the car. **One shared plan per sessio
    - **Score = when the last group finishes + time for everyone to regroup** (at the pin, or wherever groups end closest)
    - Every door counts the same. Time = walking (~1.3 m/s) + a fixed ~1 minute per door, with doors shared within a group (e.g. one person per side of the street) while walking isn't
    - Shown like _"Pairs: done ~7:35 pm · regroup near Oakridge & Elm"_
-5. **Picking an option** draws a dashed **route per group** in its members' colours and claims their blocks. It replaces the current plan for those houses, and everything stays editable. Group members are assigned randomly and are easy to swap
+5. **Picking an option** draws a dashed **route per group** in its members' colours and claims their blocks. It replaces the current plan for those houses. Group members are assigned randomly and are easy to swap
+6. **Everyone can edit the result:** the routes and claims are ordinary plan items, so anyone in the session can erase, redraw, claim or unclaim them, like any other drawing. Only "clear mine" and undo are limited to whoever applied the suggestion
 
 How it plans:
 
