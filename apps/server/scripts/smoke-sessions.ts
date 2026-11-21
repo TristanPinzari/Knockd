@@ -10,6 +10,7 @@ import {
   type PlanEditOp,
   type ServerToClientEvents,
   type SessionAccessRes,
+  trailToGeoJSON,
 } from "@knockd/shared";
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
@@ -125,9 +126,32 @@ check("pings batch → 3 accepted", p1.json?.accepted === 3);
 const p2 = await call("POST", `${S}/pings`, pingBatch, b.token);
 check("same batch again (offline retry) → 0 accepted", p2.json?.accepted === 0);
 await wait(300);
+const posEvent = sockA.events.find((e) => e.event === "positions")?.payload as
+  { positions: { t: string }[] } | undefined;
 check(
-  "A receives B's position",
-  sockA.events.some((e) => e.event === "positions"),
+  "A receives all 3 of B's points, oldest first",
+  posEvent?.positions.length === 3 && posEvent.positions[0]!.t < posEvent.positions[2]!.t,
+);
+const trails = await call("GET", `${S}/trails`, undefined, a.token);
+const jasTrail = trails.json?.trails?.find((t: { memberId: string }) => t.memberId === b.member.id);
+check(
+  "trails endpoint: Jas's 3 points as [t, lat, lng]",
+  jasTrail?.points?.length === 3 && jasTrail.points[0].length === 3,
+);
+const sinceSecond = new Date(jasTrail.points[1][0]).toISOString();
+const newer = await call("GET", `${S}/trails?since=${encodeURIComponent(sinceSecond)}`, undefined, a.token);
+check(
+  "trails ?since= → only newer points",
+  newer.json?.trails?.find((t: { memberId: string }) => t.memberId === b.member.id)?.points?.length === 1,
+);
+const styled = trailToGeoJSON(
+  b.member.id,
+  jasTrail.points.map(([t, lat, lng]: number[]) => ({ t, lat, lng })),
+);
+check(
+  "trailToGeoJSON styles it",
+  styled.features.length >= 1,
+  styled.features.map((f) => f.properties?.mode).join(", "),
 );
 
 // ---------- live: leads ----------
@@ -160,7 +184,13 @@ check("unknown house → 400", badHouse.status === 400);
 
 // ---------- live: pins & chat ----------
 const pinId = randomUUID();
-const pin = await call("POST", `${S}/pins`, { clientId: pinId, lat: BYRON.lat, lng: BYRON.lng }, b.token);
+const pin = await call(
+  "POST",
+  `${S}/pins`,
+  { clientId: pinId, lat: BYRON.lat, lng: BYRON.lng, label: "meet up here once done" },
+  b.token,
+);
+check("pin with a label", pin.json?.pin?.label === "meet up here once done");
 await call("DELETE", `${S}/pins/${pinId}`, undefined, b.token);
 await wait(300);
 check(

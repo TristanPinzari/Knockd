@@ -259,6 +259,8 @@ export const pins = pgTable(
       .notNull()
       .references(() => sessionMembers.id, { onDelete: "cascade" }),
     location: geometry("location", "Point").notNull(),
+    /** Optional short label, e.g. "meet up here once done". */
+    label: text("label"),
     createdAt: createdAt(),
     deletedAt: ts("deleted_at"),
   },

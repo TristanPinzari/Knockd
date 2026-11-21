@@ -95,7 +95,11 @@ export const PastLead = z.object({
 });
 export type PastLead = z.infer<typeof PastLead>;
 
-export const Pin = LatLng.extend({ clientId: Uuid, memberId: Uuid, createdAt: Timestamp });
+export const PIN_LABEL_MAX = 80;
+/** e.g. "meet up here once done" */
+export const PinLabel = z.string().trim().max(PIN_LABEL_MAX);
+
+export const Pin = LatLng.extend({ clientId: Uuid, memberId: Uuid, label: PinLabel.nullable(), createdAt: Timestamp });
 export type Pin = z.infer<typeof Pin>;
 
 export const Message = z.object({

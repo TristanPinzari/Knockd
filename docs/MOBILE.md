@@ -20,4 +20,5 @@ None of these are secret (they ship inside the app), but keep `.env` out of git 
   - **Account token** (Auth0 access token): for `/v1/me`, `/v1/teams/...`, `/v1/invites/...`. Optional on `POST /v1/sessions` and `/v1/sessions/join`: send it there to link the session to the account (needed to upload it to a team later)
   - **Session token** (returned by create/join): for everything under `/v1/sessions/:id/...` and the socket (`io(API_URL, { auth: { token } })`)
 - **Map style:** `https://api.knockd.rodeo/tiles/style.json` (MapLibre). Tiles are standard XYZ, so offline packs work. See "Map tiles" in [API.md](API.md)
+- **Teammates' trails:** load `GET /v1/sessions/:id/trails` on open/reconnect, append points from `positions` socket events, and draw `trailToGeoJSON(memberId, points)` from `@knockd/shared` as a MapLibre line layer styled on `mode` (`knocking` thick, `walking` thin, `driving` faint). No user input needed: speed decides
 - API reference: [API.md](API.md). Request/response types: `@knockd/shared`

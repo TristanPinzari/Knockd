@@ -25,6 +25,7 @@ import {
   MapView,
   Member,
   PastLead,
+  PinLabel,
   Message,
   Pin,
   PlanContent,
@@ -176,7 +177,7 @@ export type PatchLeadBody = z.infer<typeof PatchLeadBody>;
 export const PatchLeadRes = PostLeadRes;
 export type PatchLeadRes = PostLeadRes;
 
-export const PostPinBody = LatLng.extend({ clientId: Uuid });
+export const PostPinBody = LatLng.extend({ clientId: Uuid, label: PinLabel.optional() });
 export type PostPinBody = z.infer<typeof PostPinBody>;
 export const PostPinRes = z.object({ pin: Pin });
 export type PostPinRes = z.infer<typeof PostPinRes>;
@@ -190,6 +191,21 @@ export const GetMessagesQuery = z.object({ after: Uuid.optional() });
 export type GetMessagesQuery = z.infer<typeof GetMessagesQuery>;
 export const GetMessagesRes = z.object({ messages: z.array(Message) });
 export type GetMessagesRes = z.infer<typeof GetMessagesRes>;
+
+// ============================== Trails ==============================
+
+/** Only points newer than `since` (for catching up after reconnecting). Omit for the whole session. */
+export const TrailsQuery = z.object({ since: Timestamp.optional() });
+export type TrailsQuery = z.infer<typeof TrailsQuery>;
+
+/**
+ * Each member's GPS trail, oldest first. Points are compact tuples [tMs, lat, lng] (t in ms since
+ * the epoch), ready for classifyTrail / trailToGeoJSON from @knockd/shared.
+ */
+export const TrailsRes = z.object({
+  trails: z.array(z.object({ memberId: Uuid, points: z.array(z.tuple([z.number(), z.number(), z.number()])) })),
+});
+export type TrailsRes = z.infer<typeof TrailsRes>;
 
 // ============================== Planning (in session) ==============================
 

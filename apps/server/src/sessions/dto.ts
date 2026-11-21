@@ -19,10 +19,18 @@ export const toMessage = (m: typeof chatMessages.$inferSelect): Message => ({
   createdAt: m.createdAt.toISOString(),
 });
 
-export const toPin = (p: { id: string; memberId: string; createdAt: Date; lat: number; lng: number }): Pin => ({
+export const toPin = (p: {
+  id: string;
+  memberId: string;
+  label: string | null;
+  createdAt: Date;
+  lat: number;
+  lng: number;
+}): Pin => ({
   clientId: p.id,
   memberId: p.memberId,
   lat: p.lat,
   lng: p.lng,
+  label: p.label,
   createdAt: p.createdAt.toISOString(),
 });

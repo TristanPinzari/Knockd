@@ -69,8 +69,13 @@ Two things work together:
 ### Live map
 
 - Each teammate is a coloured dot with a trail behind them
+- **Trails show what people are doing**, worked out automatically from speed (nobody marks anything):
+  - **Thick:** knocking door to door
+  - **Thin:** walking past
+  - **Faint:** driving
+  - So you can see where a teammate is and what they've covered without calling or texting them
 - Group chat
-- "Heading here" pins to mark a specific point
+- **Pins** with an optional short label, e.g. "meet up here once done" or "heading here"
 
 ### Worked vs passed-by streets
 

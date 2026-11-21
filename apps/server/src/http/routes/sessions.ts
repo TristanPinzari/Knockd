@@ -11,6 +11,7 @@ import {
   PostPinBody,
   PostPingsBody,
   StartSimBody,
+  TrailsQuery,
   Uuid,
 } from "@knockd/shared";
 import { maybeAccountUser, optionalAccount } from "../../auth/account";
@@ -118,6 +119,12 @@ sessionsRouter.delete("/:id/pins/:clientId", async (req, res) => {
 sessionsRouter.post("/:id/messages", async (req, res) => {
   const { sessionId, memberId } = sessionCtx(res);
   res.json({ message: await writes.addMessage(sessionId, memberId, parse(PostMessageBody, req.body)) });
+});
+
+// Everyone's trail so far (on open / reconnect). ?since= for only newer points.
+sessionsRouter.get("/:id/trails", async (req, res) => {
+  const { since } = parse(TrailsQuery, req.query);
+  res.json(await writes.getTrails(sessionCtx(res).sessionId, since));
 });
 
 sessionsRouter.get("/:id/messages", async (req, res) => {
