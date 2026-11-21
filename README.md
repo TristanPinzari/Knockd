@@ -41,7 +41,7 @@ It has two parts:
 1. Crew pulls up to an area
 2. One person creates a session, picks the area (pin + radius, or draw it), and shares a code
 3. Everyone joins — each person appears as a different coloured dot on the map
-4. The crew plans together in **planning mode**: Knockd splits the area into blocks, the crew assigns blocks to people or pairs (or taps Suggest), then applies the plan to the shared map
+4. The crew plans together in **planning mode**, live on everyone's phone: claim blocks, sketch routes and drop notes, or select houses and tap Suggest for ranked routes
 5. As people move, they leave a coloured trail behind them
 6. Streets get "painted" as they're worked, and blocks fill in as their streets are covered
 7. Leads are marked with a long-press on the house and graded A, B or C; everything else is assumed no lead
@@ -370,7 +370,7 @@ Check how many prize tracks one project can enter.
 **Demo (about 3 minutes):**
 
 1. Show the web team map with weeks of seeded Byron history (`pnpm --filter @knockd/server seed:demo`: 12 sessions, 93 leads, lead-rate colours)
-2. On the phone, create a session, pick an area, tap Suggest
+2. On the phone, create a session, select houses with the circle brush, tap Suggest and pick the top-ranked option
 3. Start simulated crew mode, and the map fills in live
 4. Mark an A lead and watch the alert appear for everyone
 5. End the session, upload it to the team, and see it on the web map
