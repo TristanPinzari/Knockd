@@ -283,7 +283,7 @@ Validated market (D2D software is a real category) but the lightweight peer-coor
 - 1st/2nd/3rd Overall
 - Most Adventurous ("discover the unknown"): the map shows where the crew hasn't been yet
 - Best Use of Tiger Data: hypertables for GPS pings, PostGIS for streets and blocks, continuous aggregates for stats
-- Best Use of Vultr: hosts the server, map matching and map tiles
+- Best Use of Vultr: hosts the API server (Coolify), realtime sockets and map tiles
 - Best Use of Auth0: accounts and team invites
 - Best Domain Name from GoDaddy Registry
 - Best Use of Entire: use Sessions and Graph while building
@@ -327,5 +327,4 @@ Check how many prize tracks one project can enter.
 
 - Background location on iOS and Android
 - Offline map downloads working with Expo
-- OSRM memory on the VM (London extract only)
 - Battery drain on a long walk (batch pings every 15–30 seconds)

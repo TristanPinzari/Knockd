@@ -24,6 +24,7 @@ import { signSessionToken } from "../auth/session-token";
 import { db } from "../db/client";
 import { chatMessages, leads, maps, pins, sessionCells, sessionMembers, sessionPlans, sessions } from "../db/schema";
 import { forbidden, HttpError, notFound } from "../http/errors";
+import { enqueueProcessing } from "../jobs/scheduler";
 import { disconnectMember, emitToSession, isOnline } from "../realtime/io";
 import { toLead, toMessage, toPin } from "./dto";
 
@@ -242,7 +243,7 @@ export async function endSession(sessionId: string, memberId: string): Promise<v
   if (session.status !== "live") throw new HttpError(409, "conflict", "This session has already ended");
   await db.update(sessions).set({ status: "ended", endedAt: new Date() }).where(eq(sessions.id, sessionId));
   emitToSession(sessionId, "session:ended");
-  // TODO: queue the process-session job (map matching, street coverage, block stats).
+  enqueueProcessing(sessionId); // street coverage, paths, block stats → session:processed
 }
 
 export async function leaveSession(sessionId: string, memberId: string): Promise<void> {

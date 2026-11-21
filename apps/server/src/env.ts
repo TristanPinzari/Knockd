@@ -25,7 +25,6 @@ const Env = z.object({
   AUTH0_AUDIENCE: z.string().optional(),
   /** Team invite links are `${INVITE_BASE_URL}/${token}`. */
   INVITE_BASE_URL: z.string().url().default("https://knockd.rodeo/invite"),
-  OSRM_URL: z.string().url().optional(),
 });
 
 const parsed = Env.safeParse(process.env);
