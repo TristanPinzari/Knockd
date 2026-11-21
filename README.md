@@ -1,5 +1,4 @@
 # Knockd — Door-to-Door Team Coordination App
-*Idea captured June 2026*
 
 ---
 
@@ -30,7 +29,7 @@ It has two parts:
 6. Streets get "painted" as they're worked — the map fills in visually as the crew works
 7. Sales are marked with a long-press on the house; everything else is assumed no sale
 8. Session ends when the crew is done for the day, with end-of-day stats
-9. If the creator has an account, the session is saved to the team's history for the web app
+9. Anyone in the session who's on a team can upload it to that team, where it shows up on the team's maps in the web app
 
 ## Mobile App (Phase 1)
 
@@ -78,6 +77,10 @@ Replaces screenshot-and-draw. A shared planning screen inside the session:
 ### End-of-day stats
 Plain stats, per person and for the crew: streets worked vs passed, blocks completed, houses covered, sales, distance, active time.
 
+### Uploading to a team
+- At the end of a session, everyone in it who's on a team gets a prompt listing their teams: "Add to London Painters?"
+- Plans from the team's plan library can be loaded into planning mode as a starting point (see Web App)
+
 ### Offline
 - GPS points, sales and planning changes are stored on the phone (SQLite), each with a unique ID
 - Sent when the connection comes back. The server ignores duplicates
@@ -95,26 +98,59 @@ The app runs for a whole shift and crews can't charge mid-job, so battery use is
 
 ## Web App (Phase 2)
 
-Post-session analysis and area planning, built once mobile is done. *Still being scoped.* Ideas so far:
+Post-session analysis and area planning. Mobile is the priority, but the goal is to build both.
 
-- **Territory Map:** every street the team has worked, coloured by how long ago:
-  - 🟢 Green: this week
-  - 🟡 Yellow: 1–4 weeks ago
-  - 🟠 Orange: 1–3 months ago
-  - ⚪ Grey: 3+ months ago, or never worked
-- **Time slider:** replay how the territory filled in ("show coverage as of 3 weeks ago")
-- **Filters:** by date range, neighbourhood or crew
-- **Stats:** "42% of Byron covered in the last 30 days", streets worked per week, distance, sales
-- **Where next?:** areas that haven't been worked for the longest time
-- **Previous paths:** replay any past session and see which streets each person walked
-- **Demographics:** overlay census data (household income, homeownership, home age, density) to judge which areas are worth knocking
-- Team and session history
+**Who it's for:** anyone coordinating door-to-door sessions: the owner, a crew lead, or the whole team looking at the map together. Everything is shared within a team.
+
+### Teams and maps
+- Anyone can create a team and invite others by link. Once someone joins, they can see all of the team's maps
+- Sessions are uploaded **once to the team**, not to a specific map
+- **Maps are saved views** of the team's data: a name plus an area boundary and/or filters
+  - "London D2D Map": a boundary around London
+  - "Brampton Map": a boundary around Brampton
+  - "World Map": no boundary, the company's entire progress
+  - Maps can also filter by date, e.g. "Summer 2026"
+- A session in Byron shows up on both London and World automatically. Nobody has to add it to each map, and removing a session removes it everywhere
+- A company that wants one combined picture puts everyone in one team
+- **Roles:** owner/admin invites people and can remove sessions. Members can view, upload and make plans
+
+### How the map is drawn
+**Paths show effort and recency.** Each session's paths are drawn as their own translucent lines, with visibility = duration × age:
+- **Duration:** a drive-by is barely noticeable. Around 30+ minutes on a street is clearly solid
+- **Age:** a multiplier that fades paths over an adjustable fade time (default 4 months). After that, old work stays just barely visible
+- Repeat visits stack, so a street worked three times looks darker than one worked once
+
+**Block colour shows sale rate** (sales ÷ houses worked):
+- 🟢 Green: lots of sales, good money-making houses
+- 🟡 Yellow: average
+- 🔴 Red: no sales
+- ⚪ Grey: not enough data yet. A block stays neutral until enough houses have been worked there (e.g. 15+), and small samples are nudged toward the team's average so one lucky sale doesn't paint a block green
+- The colour scale changes in lightness as well as hue, so it still reads for colour-blind users
+
+### Core features
+- **Time slider:** replay how the territory filled in ("show the map as of 3 weeks ago")
+- **Filters:** date range, crew, neighbourhood
+- **Stats:** coverage, houses worked, distance, sales, and **sale rate** = sales ÷ houses, per session or per area
+- **"Hit X time ago"** for any street or block
+- **Where next?:** a simple ranking of how wealthy an area is (census median household income) × how long since it was last hit
+- **Plan library:** a boss sits down and makes several plans (blocks assigned per person or pair). The crew picks one in the field, it loads into mobile planning mode, and it's marked as used once a session runs it. Plans belong to the team and can be tied to a map
+- **Previous paths and session history:** replay any past session and see which streets each person walked
+
+### Nice to have
+- Demographics overlay (income, homeownership, home age, density) and demographics compared with sales
+- Smarter "where next?" that also uses past sale rate
+- Best time to knock, by hour (5–8pm is already the established default)
+- Plan vs actual: blocks assigned vs blocks actually worked
+- **Gemini add-on:** "ask your data" questions like "which neighbourhoods sold best in October?", turned into read-only SQL on the team's data
+- CSV export
 
 ## Accounts & Data
 
 - Joining a live session: no account needed, just a code and a name
-- Saving history and viewing it outside a session: account required
-- A session is saved to the team of the logged-in person who created it. Sessions created without an account aren't saved
+- Uploading to a team and viewing team maps: account and team membership required
+- **Uploading:** at the end of a session, anyone in it who's on a team can upload it. Uploads are deduplicated by (team, session ID), so if everyone taps "add" it's only stored once. A session can go to more than one team, once each
+- **Everyone's paths are uploaded**, including guests without accounts. The join screen says so: "your path may be saved to the crew's team map"
+- **Grace period:** session data stays on the server for about 7 days so someone can upload it later if everyone skipped the prompt or a phone died. Sessions nobody uploads are deleted after that
 - After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and sales are saved. The raw GPS points are deleted
 - **Positioning:** the history is the crew's shared memory, not a way for a manager to track people. Paths are saved as streets walked per session, not a minute-by-minute record of where someone was
 
@@ -146,9 +182,10 @@ This is peer-to-peer. Teammates see each other, not a manager seeing subordinate
   - Map queries return what's in view as GeoJSON (`ST_AsGeoJSON`)
 - **OSRM** map matching to snap GPS trails onto real streets
 - Hosted on a **Vultr** VM (Docker Compose via Coolify) running the Socket.io server and OSRM
-- **Auth0** for accounts (shared by mobile and the Phase 2 web app)
-- Phase 2 web app: Next.js using the same server API and Google Maps. Demographics come from census data loaded into PostGIS (e.g. Statistics Canada dissemination areas)
-- **Gemini:** no role on mobile. Possibly a role in the web app, to be decided
+- **Auth0** for accounts and team invites (shared by mobile and the web app)
+- Web app: Next.js using the same server API and Google Maps. Census data (median household income for "where next?", plus demographics) loaded into PostGIS from Statistics Canada dissemination areas
+- Data model: teams → members, sessions (unique per team + session ID), plans. Maps are saved views (boundary polygon + filters) over the team's sessions
+- **Gemini:** optional web add-on for "ask your data". No role on mobile
 
 ```
 Phones  <--websockets-->  Vultr VM                    -->  Tiger Data
@@ -161,25 +198,33 @@ Later, Firebase could take over the live layer (offline queueing, auto-reconnect
 ## Name & Domain
 
 - Working name: **Knockd** — checked on App Store and Google Play, no conflicting app found
-- knockd.com is available for purchase (check Namecheap/GoDaddy for price)
-- knockdd.com is registered but abandoned (error page)
-- getknockd.com or knockdapp.com are cheap fallback options
-- Domain matters less than the app store presence for this type of product
+- For the GoDaddy Registry domain prize, the domain has to be on a GoDaddy Registry extension (e.g. .co, .us, .biz), not .com. Something like knockd.co. Check the eligible list at the event
+- Register it early and point it at the Vultr server so HTTPS works from the start
 
 ## Market
 
 Validated market (D2D software is a real category) but the lightweight peer-coordination niche is unserved. Target users: summer sales crews, painting companies, fundraising canvassers, political canvassing teams, small field sales teams. All informal, price-sensitive, coordination-heavy.
 
-## Why I'm Shelving It (For Now)
+## Hackathon
 
-- Notify takes priority — further along, real pitch lined up
-- No mobile experience yet, need to get Expo basics first
-- Door-to-door season is summer; want to be able to dogfood it myself
-- Come back to this September/October, build over winter, ready for next summer
+**Prizes we're targeting:**
+- 1st/2nd/3rd Overall
+- Most Adventurous ("discover the unknown"): the map shows where the crew hasn't been yet
+- Best Use of Tiger Data: hypertables for GPS pings, PostGIS for streets and blocks, continuous aggregates for stats
+- Best Use of Vultr: hosts the server and OSRM map matching
+- Best Use of Auth0: accounts and team invites
+- Best Domain Name from GoDaddy Registry
+- Best Use of Entire: use Sessions and Graph while building
+- Best Use of Gemini: only if the "ask your data" add-on gets built
 
-## Next Steps When Returning
+Check how many prize tracks one project can enter.
 
-- Spend a weekend getting comfortable with Expo
-- Build the live location sharing piece as a standalone proof of concept
-- Find a painting crew or sales team willing to beta test
-- Consider the name — "painting the map" is literally what the app does and what the users do for work
+**Priorities:**
+1. Mobile: sessions, live map, worked vs passed-by streets, blocks, sales, planning mode, simulated crew mode
+2. Server and database on Vultr + Tiger Data, with uploads to teams
+3. Web: team map with paths and sale-rate colours, time slider, stats
+4. Everything else in the web section
+
+**Demo:** seed the database with a few weeks of fake past sessions so the web map already has history. Then run a simulated session on the phone and show it appear on the web map after upload.
+
+**Before the event:** get a basic Expo app with background location running on both an iPhone and an Android. Background location permissions are the most likely thing to cost hours during the hackathon.
