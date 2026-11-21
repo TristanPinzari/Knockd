@@ -103,6 +103,8 @@ export const SessionSnapshotRes = z.object({
   leads: z.array(Lead),
   pins: z.array(Pin),
   plan: PlanContent,
+  /** See GetSessionPlanRes.version. */
+  planVersion: z.number().int().nonnegative(),
   /** Most recent SNAPSHOT_MESSAGE_LIMIT messages, oldest first. */
   messages: z.array(Message),
 });
@@ -215,7 +217,8 @@ export type TrailsRes = z.infer<typeof TrailsRes>;
 
 // ============================== Planning (in session) ==============================
 
-export const GetSessionPlanRes = z.object({ plan: PlanContent });
+/** version goes up by 1 on every edit (0 = never edited). */
+export const GetSessionPlanRes = z.object({ plan: PlanContent, version: z.number().int().nonnegative() });
 export type GetSessionPlanRes = z.infer<typeof GetSessionPlanRes>;
 
 /** Default when a crew has no history (README: ~25 houses/hour per pair). */

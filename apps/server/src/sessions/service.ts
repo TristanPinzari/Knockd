@@ -190,6 +190,7 @@ export async function getSnapshot(sessionId: string): Promise<SessionSnapshotRes
     leads: leadRows.map(toLead),
     pins: pinRows.map(toPin),
     plan: plan[0]?.plan ?? EMPTY_PLAN,
+    planVersion: plan[0]?.version ?? 0,
     messages: messageRows.reverse().map(toMessage),
   };
 }

@@ -234,6 +234,18 @@ check("a drawing for a member AND in a utility colour is rejected", !both.ok);
 await wait(300);
 const updates = sockB.events.filter((e) => e.event === "plan:updated");
 check("B receives plan:updated for each edit", updates.length === 4, `${updates.length} updates`);
+const versions = updates.map((e) => (e.payload as { version: number }).version);
+check(
+  "plan versions go up by 1 per edit, in order",
+  versions.every((v, i) => i === 0 || v === versions[i - 1]! + 1),
+  versions.join(", "),
+);
+const planRes = (await call("GET", `${S}/plan`, undefined, a.token)).json;
+check(
+  "GET /plan and the snapshot report the latest version",
+  planRes?.version === versions.at(-1) &&
+    (await call("GET", S, undefined, a.token)).json?.planVersion === versions.at(-1),
+);
 
 // Jas joins Tristan's block (a pair), then clears her own stuff: Tristan's items must survive.
 const sockBJoin = await connect(b.token);

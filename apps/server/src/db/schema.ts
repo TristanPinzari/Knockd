@@ -307,6 +307,8 @@ export const sessionPlans = pgTable("session_plans", {
     .references(() => sessions.id, { onDelete: "cascade" }),
   /** The live session plan: claims, drawings, notes. */
   plan: jsonb("plan").$type<PlanContent>().notNull().default(EMPTY_PLAN),
+  /** +1 on every edit, so phones can spot a missed or stale update. */
+  version: integer("version").notNull().default(0),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
