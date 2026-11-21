@@ -183,6 +183,8 @@ export const sessionMembers = pgTable(
     isBot: boolean("is_bot").notNull().default(false),
     joinedAt: ts("joined_at").notNull().defaultNow(),
     leftAt: ts("left_at"),
+    /** Set when the session admin removes them. Their session token stops working; their data stays. */
+    removedAt: ts("removed_at"),
   },
   (t) => [index("session_members_session_idx").on(t.sessionId), index("session_members_user_idx").on(t.userId)],
 );
