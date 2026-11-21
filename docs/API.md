@@ -384,9 +384,25 @@ Blocks and house counts for building plans on the web, outside a session.
 
 ## Map tiles
 
+The basemap for MapLibre: OpenStreetMap data from Protomaps, cut to London (zoom 0–15). No API key. Not under `/v1`.
+
+### `GET /tiles/style.json` 🔓
+
+**Use this as the map style URL.** A ready-made MapLibre style (Protomaps "light", English labels) whose source is the XYZ tiles below. Fonts and icons load from `protomaps.github.io`.
+
+```ts
+<MapView mapStyle="https://api.knockd.rodeo/tiles/style.json" />
+```
+
+### `GET /tiles/{z}/{x}/{y}.mvt` 🔓
+
+Vector tiles (gzipped on the wire). `204` for empty tiles outside London. Standard XYZ, so it works in any MapLibre, including React Native **offline packs**: download the session area at zooms ~12–16 before heading out.
+
 ### `GET /tiles/london.pmtiles` 🔓
 
-The basemap as a Protomaps PMTiles file, for MapLibre. Supports HTTP range requests. Not under `/v1` since it's a static file.
+The whole archive (~13 MB) with HTTP range requests, for `pmtiles://` on the web if preferred.
+
+Attribution to show on the map: "© Protomaps © OpenStreetMap" (included in the style's source).
 
 ---
 

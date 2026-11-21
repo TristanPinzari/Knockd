@@ -204,9 +204,11 @@ Thresholds are in `PROCESSING` at the top of the file; tune them after a real te
 
 **MapLibre + a self-hosted basemap, not Google Maps.** Google's map SDK can't download maps for offline use, and offline is in scope. MapLibre can, it's free, and the same library works on React Native and web. It needs an Expo dev build, which we need anyway for background location.
 
-- The basemap is a **Protomaps PMTiles** file cut to London (`pmtiles extract` from a Protomaps daily build with a London bounding box)
-- The API serves it as a static file: `GET /tiles/london.pmtiles` with HTTP range requests (Express static supports these). No API key
-- Phones download the session area ahead of time for offline use
+- The basemap is a **Protomaps PMTiles** file cut to London (~13 MB, zoom 0–15): `pmtiles extract` from the latest Protomaps daily build with the London bounding box
+- It's **built into the Docker image** by a separate build stage (see the [Dockerfile](../apps/server/Dockerfile)). Docker caches that step; bump `TILES_REFRESH` to pull a newer build
+- [src/tiles/router.ts](../apps/server/src/tiles/router.ts) serves `/tiles/style.json` (Protomaps "light" style from `@protomaps/basemaps`), `/tiles/{z}/{x}/{y}.mvt` (read from the archive with the `pmtiles` library) and the raw `/tiles/london.pmtiles` (range requests). No API key
+- XYZ tiles work in any MapLibre, including React Native offline packs, so phones download the session area ahead of time for offline use
+- **Local dev:** put `london.pmtiles` in `apps/server/data/tiles/` (gitignored), made with the [pmtiles CLI](https://github.com/protomaps/go-pmtiles/releases): `pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles london.pmtiles --bbox=-81.42,42.82,-81.05,43.10 --maxzoom=15`
 - Our own data (streets, blocks, houses, paths) comes from the API as GeoJSON and is drawn on top
 - Credit "© OpenStreetMap contributors" on both apps
 
@@ -263,7 +265,7 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
 - **Vultr VM** (Toronto, 4 vCPU / 8 GB) with the Coolify Marketplace image
 - **`api`**: a Coolify **Application** built from [apps/server/Dockerfile](../apps/server/Dockerfile) (build context: repo root). Coolify redeploys it on every push to `main`
   - On start it runs `pnpm db:migrate` (new Drizzle migrations + continuous aggregates), then the server
-  - Also serves `london.pmtiles` once it's added
+  - Also serves the London basemap (style, tiles, `london.pmtiles`), built into the image
 - Background jobs (session processing, auto-end, cleanup) run inside the same container
 - Coolify's proxy handles HTTPS (Let's Encrypt) and WebSockets once the domain points at the VM, so no separate Caddy setup
 - **Domain:** `knockd.rodeo`. DNS A records `api.knockd.rodeo` (the API) and `coolify.knockd.rodeo` (the dashboard) point at the VM. Vultr region: Toronto
@@ -286,4 +288,3 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
 - PostGIS is available on the Tiger Cloud free tier
 - That `ST_Polygonize` on London's roads gives sensible blocks (cul-de-sacs and parks will need cleanup)
 - Worked/passed thresholds, using a real test walk
-- MapLibre React Native can read PMTiles for offline downloads. If not, serve the same file as standard `/{z}/{x}/{y}` tiles with `go-pmtiles serve` as a third container

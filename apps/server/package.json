@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@knockd/shared": "workspace:*",
+    "@protomaps/basemaps": "^5.7.2",
     "compression": "^1.8.2",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.4",
@@ -30,6 +31,7 @@
     "jose": "^6.2.18",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
+    "pmtiles": "^4.5.0",
     "postgres": "^4.1.1",
     "socket.io": "^4",
     "zod": "^3.25"
