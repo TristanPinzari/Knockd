@@ -7,6 +7,5 @@
 .github
 apps/server/data
 apps/mobile
-apps/web
 docs
 *.log
