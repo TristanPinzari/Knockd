@@ -166,6 +166,7 @@ export async function getSnapshot(sessionId: string): Promise<SessionSnapshotRes
       .select({
         id: pins.id,
         memberId: pins.memberId,
+        label: pins.label,
         createdAt: pins.createdAt,
         lat: sql<number>`ST_Y(${pins.location})`,
         lng: sql<number>`ST_X(${pins.location})`,

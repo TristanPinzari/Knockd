@@ -218,7 +218,8 @@ Undo. Broadcasts `lead:removed`.
 ### `POST /v1/sessions/:id/pins` 🎟️
 
 ```ts
-{ clientId, lat, lng } → { pin }
+{ clientId, lat, lng, label?: string } → { pin }   // label: optional, max 80, e.g. "meet up here once done"
+// pin = { clientId, memberId, lat, lng, label | null, createdAt }
 ```
 
 ### `DELETE /v1/sessions/:id/pins/:clientId` 🎟️
@@ -232,6 +233,16 @@ Undo. Broadcasts `lead:removed`.
 ### `GET /v1/sessions/:id/messages?after=<messageId>` 🎟️
 
 Messages missed while disconnected.
+
+### `GET /v1/sessions/:id/trails?since=<timestamp>` 🎟️
+
+Everyone's GPS trail so far, for drawing trails when the app opens or reconnects. `since` returns only newer points.
+
+```ts
+→ { trails: { memberId, points: [tMs, lat, lng][] }[] }   // oldest first; t in ms since the epoch
+```
+
+**Drawing trails:** keep each member's points (from this endpoint, then append `positions` events) and pass them to `trailToGeoJSON(memberId, points)` from `@knockd/shared`. It returns one line per stretch with `properties.mode`: `"knocking"` (averaging under ~3 km/h), `"walking"` or `"driving"` (over 9 km/h), and breaks the line at gaps over 2 minutes. Style on `mode` (e.g. thick / thin / faint). The thresholds match end-of-session processing, so live trails agree with the final worked/passed results.
 
 ---
 
@@ -453,21 +464,21 @@ Connect with `auth: { token }` (session token). The server checks it and joins t
 
 ### Server → client
 
-| Event                     | Payload                                                   |
-| ------------------------- | --------------------------------------------------------- |
-| `member:joined`           | `{ member }`                                              |
-| `member:left`             | `{ memberId }`                                            |
-| `member:status`           | `{ memberId, online }`                                    |
-| `positions`               | `{ positions: { memberId, lat, lng, t }[] }`              |
-| `lead:new`                | `{ lead, memberName }` (drives the alert and leaderboard) |
-| `lead:updated`            | `{ lead }`                                                |
-| `lead:removed`            | `{ clientId }`                                            |
-| `pin:new` / `pin:removed` | `{ pin }` / `{ clientId }`                                |
-| `message:new`             | `{ message }`                                             |
-| `plan:draft`              | `{ draft, editedBy }`                                     |
-| `plan:applied`            | `{ plan }`                                                |
-| `session:ended`           | `{}`                                                      |
-| `session:processed`       | `{}` (the upload prompt can show now)                     |
+| Event                     | Payload                                                                                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `member:joined`           | `{ member }`                                                                                                                                         |
+| `member:left`             | `{ memberId }`                                                                                                                                       |
+| `member:status`           | `{ memberId, online }`                                                                                                                               |
+| `positions`               | `{ positions: { memberId, lat, lng, t }[] }`: every point from a member's upload batch, oldest first. Append to their trail; the newest is their dot |
+| `lead:new`                | `{ lead, memberName }` (drives the alert and leaderboard)                                                                                            |
+| `lead:updated`            | `{ lead }`                                                                                                                                           |
+| `lead:removed`            | `{ clientId }`                                                                                                                                       |
+| `pin:new` / `pin:removed` | `{ pin }` / `{ clientId }`                                                                                                                           |
+| `message:new`             | `{ message }`                                                                                                                                        |
+| `plan:draft`              | `{ draft, editedBy }`                                                                                                                                |
+| `plan:applied`            | `{ plan }`                                                                                                                                           |
+| `session:ended`           | `{}`                                                                                                                                                 |
+| `session:processed`       | `{}` (the upload prompt can show now)                                                                                                                |
 
 ### Client → server
 

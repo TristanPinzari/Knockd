@@ -13,6 +13,7 @@ import {
   type PostMessageBody,
   type PostPinBody,
   type PostPingsBody,
+  type TrailsRes,
 } from "@knockd/shared";
 import { db } from "../db/client";
 import { chatMessages, leads, pings, pins, sessionMembers, sessions } from "../db/schema";
@@ -66,9 +67,12 @@ export async function addPings(sessionId: string, memberId: string, body: PostPi
     .onConflictDoNothing({ target: [pings.clientId, pings.time] })
     .returning({ clientId: pings.clientId });
 
-  // Broadcast this member's newest position from the batch. Clients ignore positions older than what they have.
-  const latest = valid.reduce((a, b) => (Date.parse(b.t) > Date.parse(a.t) ? b : a));
-  emitToSession(sessionId, "positions", { positions: [{ memberId, lat: latest.lat, lng: latest.lng, t: latest.t }] });
+  // Broadcast every point in the batch (oldest first), so teammates can draw the full trail.
+  // The newest one is the member's dot. Offline catch-up batches can be older than what clients have.
+  const points = [...valid].sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  emitToSession(sessionId, "positions", {
+    positions: points.map((p) => ({ memberId, lat: p.lat, lng: p.lng, t: p.t })),
+  });
 
   return inserted.length;
 }
@@ -146,13 +150,20 @@ export async function addPin(sessionId: string, memberId: string, body: PostPinB
   const columns = {
     id: pins.id,
     memberId: pins.memberId,
+    label: pins.label,
     createdAt: pins.createdAt,
     lat: sql<number>`ST_Y(${pins.location})`,
     lng: sql<number>`ST_X(${pins.location})`,
   };
   const [row] = await db
     .insert(pins)
-    .values({ id: body.clientId, sessionId, memberId, location: pointSql(body.lat, body.lng) })
+    .values({
+      id: body.clientId,
+      sessionId,
+      memberId,
+      location: pointSql(body.lat, body.lng),
+      label: body.label || null,
+    })
     .onConflictDoNothing()
     .returning(columns);
   if (row) {
@@ -241,4 +252,29 @@ async function memberName(memberId: string): Promise<string> {
 function pgCode(err: unknown): string | undefined {
   const e = err as { code?: string; cause?: { code?: string } };
   return e.code ?? e.cause?.code;
+}
+
+// ============================== Trails ==============================
+
+/**
+ * Every member's GPS trail (oldest first) as compact [tMs, lat, lng] tuples, for drawing trails
+ * when an app opens or reconnects mid-session. `since` returns only newer points.
+ */
+export async function getTrails(sessionId: string, since?: string): Promise<TrailsRes> {
+  const rows = await db.execute<{ member_id: string; points: [number, number, number][] }>(sql`
+    SELECT member_id,
+           json_agg(json_build_array(
+             floor(EXTRACT(EPOCH FROM time) * 1000)::bigint,
+             round(ST_Y(location)::numeric, 6),
+             round(ST_X(location)::numeric, 6)) ORDER BY time) AS points
+    FROM pings
+    WHERE session_id = ${sessionId} AND accuracy_m <= 50
+      ${since ? sql`AND time > ${since}` : sql``}
+    GROUP BY member_id`);
+  return {
+    trails: rows.map((r) => ({
+      memberId: r.member_id,
+      points: r.points.map(([t, lat, lng]) => [Number(t), Number(lat), Number(lng)]),
+    })),
+  };
 }

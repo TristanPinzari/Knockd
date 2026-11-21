@@ -64,6 +64,13 @@
       "when": 1795241581126,
       "tag": "0008_member_removed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795251367376,
+      "tag": "0009_pin_labels",
+      "breakpoints": true
     }
   ]
 }
