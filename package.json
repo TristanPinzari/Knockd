@@ -9,7 +9,8 @@
     "typecheck": "pnpm -r --filter \"!knockd\" --if-present typecheck",
     "lint": "pnpm -r --filter \"!knockd\" --if-present lint",
     "test": "pnpm -r --filter \"!knockd\" --if-present test",
-    "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test"
+    "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test",
+    "rebuild:suggest-viewer": "pnpm --filter @knockd/server suggest:viewer"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"

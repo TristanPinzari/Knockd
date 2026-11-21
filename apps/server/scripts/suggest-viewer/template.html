@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Suggest Viewer</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root { --bg: #fafaf7; --panel: #ffffff; --ink: #1f2328; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--ink); background: var(--bg); display: flex; height: 100vh; }
+  #side { width: 340px; flex: none; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--line); padding: 14px; }
+  #map { flex: 1; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .label { font-size: 12px; color: var(--muted); width: 100%; margin-bottom: -2px; }
+  button { font: inherit; border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  input[type="number"] { width: 64px; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; }
+  input[type="range"] { flex: 1; }
+  .stat { font-size: 12px; color: var(--muted); margin: 6px 0 10px; }
+  .opt { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
+  .opt.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .opt b { font-size: 14px; }
+  .opt .t { font-size: 12px; color: var(--muted); }
+  .grp { display: flex; gap: 8px; align-items: center; font-size: 12px; padding: 5px 0; border-top: 1px solid var(--line); }
+  .chip { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 2px; vertical-align: -1px; }
+  .grp button.only { padding: 1px 6px; font-size: 11px; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+</style>
+</head>
+<body>
+<div id="side">
+  <h1>Suggest viewer</h1>
+  <p class="hint">Real London streets around the Byron demo spot, running the real <code>suggestRoutes</code> from @knockd/shared. Rebuild with <code>pnpm rebuild:suggest-viewer</code>.</p>
+
+  <div class="row">
+    <span class="label">Map tool</span>
+    <button data-mode="select" class="on">Select</button>
+    <button data-mode="deselect">Deselect</button>
+    <button data-mode="car">Move car</button>
+    <button data-mode="pin">Regroup pin</button>
+    <button data-mode="pan">Pan</button>
+  </div>
+  <div class="row">
+    <span class="label">Brush radius: <span id="rv">60</span> m</span>
+    <input id="radius" type="range" min="15" max="250" value="60" />
+  </div>
+  <div class="row">
+    <span class="label">Crew, seconds per door, seconds per road crossing</span>
+    <input id="crew" type="number" min="1" max="8" value="4" /> people
+    <input id="spd" type="number" min="5" max="600" value="60" /> s/door
+    <input id="cross" type="number" min="0" max="120" value="15" /> s/crossing
+  </div>
+  <div class="row">
+    <button id="shuffle">Shuffle groups</button>
+    <button id="clearpin">Clear pin</button>
+    <button id="clearsel">Clear selection</button>
+    <button id="copy" title="Copy everything needed to reproduce what you see (inputs + results) as JSON">Copy data</button>
+  </div>
+  <div class="stat" id="stat">Drag on the map to select houses.</div>
+  <div id="opts"></div>
+  <div class="legend">
+    Dashed line = a group's route; its dashes cycle through the members' colours (a pair alternates two). Routes that share a street sit side by side. Untick a group to hide its route, or press "only". Black dot = car. Red = regroup pin.
+    White ring = meeting point; a dotted line is a group's walk there after their last door. The car and the pin snap onto the nearest street. Small coloured dot = where a group finishes. Selected houses take the colour of the person who knocks them (blue = selected, not planned yet). Solos do one side of a street, then the other (crossing costs ~15 s); pairs take one side each and leapfrog where one side has more doors. The number on a house is its place in that rep's own order (zoom in to see them). A coloured U-turn badge marks every spot where a route turns back on itself.
+  </div>
+</div>
+<div id="map"></div>
+
+<script>/*SHARED*/</script>
+<script>
+const DATA = /*DATA*/;
+const { suggestRoutes, PALETTE, distanceM } = Knockd;
+
+let mode = "select";
+let radius = 60;
+let selected = new Set();
+let car = { lat: DATA.center.lat - 0.0005, lng: DATA.center.lng };
+let regroup = null;
+let seed = 1;
+let result = null;
+let chosen = 0;
+let ms = 0;
+
+const mulberry = (a) => () => {
+  a |= 0; a = (a + 0x6d2b79f5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const fc = (features) => ({ type: "FeatureCollection", features });
+const pointF = (p, props = {}) => ({ type: "Feature", properties: props, geometry: { type: "Point", coordinates: [p.lng, p.lat] } });
+const circle = (c, r) => {
+  const pts = [];
+  for (let i = 0; i <= 48; i++) {
+    const a = (i / 48) * 2 * Math.PI;
+    pts.push([c.lng + (r * Math.cos(a)) / (111320 * Math.cos((c.lat * Math.PI) / 180)), c.lat + (r * Math.sin(a)) / 111320]);
+  }
+  return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [pts] } };
+};
+const mins = (s) => `${Math.round(s / 60)} min`;
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: { version: 8, sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#f3f1ec" } }] },
+  center: [DATA.center.lng, DATA.center.lat],
+  zoom: 16,
+});
+map.dragPan.disable();
+map.doubleClickZoom.disable();
+
+// Who knocks each selected house in the chosen option (houseId → colour).
+let houseColour = new Map();
+// houseId → 1-based position in its rep's knock order.
+let houseNumber = new Map();
+const housesFc = () =>
+  fc(DATA.houses.map((h) => {
+    const sel = selected.has(h.id);
+    return { type: "Feature", properties: { sel, colour: sel ? houseColour.get(h.id) ?? null : null }, geometry: { type: "Polygon", coordinates: [h.ring] } };
+  }));
+
+// Colours and numbers come straight from Suggest: each group's knocks list says who knocks
+// which door, in order (solos do one side then the other, pairs work one side each and leapfrog).
+const houseById = new Map(DATA.houses.map((h) => [h.id, h]));
+function colourHouses(opt) {
+  houseColour = new Map();
+  houseNumber = new Map();
+  if (!opt) return;
+  opt.groups.forEach((g, gi) => {
+    if (hidden.has(gi)) return;
+    const count = new Map();
+    for (const k of g.knocks) {
+      const n = (count.get(k.memberId) ?? 0) + 1;
+      count.set(k.memberId, n);
+      houseColour.set(k.houseId, colourOf(k.memberId));
+      houseNumber.set(k.houseId, n);
+    }
+  });
+}
+
+map.on("load", () => {
+  map.addSource("streets", { type: "geojson", data: fc(DATA.streets.map((s) => ({ type: "Feature", properties: { name: s.name || "" }, geometry: { type: "LineString", coordinates: s.coordinates } }))) });
+  map.addSource("houses", { type: "geojson", data: housesFc() });
+  map.addSource("routes", { type: "geojson", data: fc([]) });
+  map.addSource("walkback", { type: "geojson", data: fc([]) });
+  map.addSource("points", { type: "geojson", data: fc([]) });
+  map.addSource("numbers", { type: "geojson", data: fc([]) });
+  map.addSource("uturns", { type: "geojson", data: fc([]) });
+  map.addSource("brush", { type: "geojson", data: fc([]) });
+  map.addLayer({ id: "streets", type: "line", source: "streets", paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 14, 3, 18, 14] } });
+  map.addLayer({ id: "streets-edge", type: "line", source: "streets", paint: { "line-color": "#cfcac0", "line-width": 1 } }, "streets");
+  map.addLayer({ id: "houses", type: "fill", source: "houses", paint: { "fill-color": ["case", ["!=", ["get", "colour"], null], ["get", "colour"], ["get", "sel"], "#60a5fa", "#d9d5cc"], "fill-outline-color": ["case", ["get", "sel"], "#1f2328", "#bdb8ad"] } });
+  map.addLayer({ id: "numbers", type: "symbol", source: "numbers", minzoom: 15.5,
+    layout: { "icon-image": ["get", "img"], "icon-size": ["interpolate", ["linear"], ["zoom"], 15.5, 0.6, 18, 1], "icon-allow-overlap": true, "icon-ignore-placement": true } });
+  map.addLayer({ id: "brush", type: "fill", source: "brush", paint: { "fill-color": "#2563eb", "fill-opacity": 0.12, "fill-outline-color": "#2563eb" } });
+  map.addLayer({ id: "points", type: "circle", source: "points", paint: {
+    "circle-radius": ["match", ["get", "kind"], "car", 9, "pin", 9, "meet", 11, 6],
+    "circle-color": ["match", ["get", "kind"], "car", "#111827", "pin", "#dc2626", "meet", "rgba(0,0,0,0)", ["get", "colour"]],
+    "circle-stroke-color": ["match", ["get", "kind"], "meet", "#111827", "#ffffff"],
+    "circle-stroke-width": ["match", ["get", "kind"], "meet", 3, 2],
+  } });
+  map.addLayer({ id: "uturns", type: "symbol", source: "uturns",
+    layout: { "icon-image": ["get", "img"], "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.7, 18, 1.1], "icon-allow-overlap": true, "icon-ignore-placement": true } });
+  draw();
+});
+
+// ---------- Canvas icons (no font server needed) ----------
+function icon(id, draw) {
+  if (map.hasImage(id)) return id;
+  const px = 2, size = 26;
+  const c = document.createElement("canvas");
+  c.width = c.height = size * px;
+  const ctx = c.getContext("2d");
+  ctx.scale(px, px);
+  draw(ctx, size);
+  map.addImage(id, ctx.getImageData(0, 0, size * px, size * px), { pixelRatio: px });
+  return id;
+}
+/** A white disc with the number, ringed in the rep's colour. */
+const numberIcon = (n, colour) =>
+  icon(`num-${n}-${colour}`, (ctx, size) => {
+    const r = size / 2 - 3;
+    ctx.beginPath(); ctx.arc(size / 2, size / 2, r, 0, 2 * Math.PI);
+    ctx.fillStyle = "#ffffff"; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = colour; ctx.stroke();
+    ctx.fillStyle = "#111827";
+    ctx.font = `700 ${n > 99 ? 8 : n > 9 ? 10 : 12}px system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(n), size / 2, size / 2 + 0.5);
+  });
+/** A disc in the group's colour with a white U-turn arrow. */
+const uturnIcon = (colour) =>
+  icon(`uturn-${colour}`, (ctx, size) => {
+    const c = size / 2;
+    ctx.beginPath(); ctx.arc(c, c, c - 1.5, 0, 2 * Math.PI);
+    ctx.fillStyle = colour; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+    ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(c + 4, c + 6); ctx.lineTo(c + 4, c - 1);   // up the right side
+    ctx.arc(c, c - 1, 4, 0, Math.PI, true);              // over the top
+    ctx.lineTo(c - 4, c + 6);                            // down the left side
+    ctx.stroke();
+    ctx.beginPath();                                     // arrowhead pointing down
+    ctx.moveTo(c - 7, c + 3); ctx.lineTo(c - 4, c + 7); ctx.lineTo(c - 1, c + 3);
+    ctx.stroke();
+  });
+
+/** Points where a route reverses (turn of more than 150°), e.g. the end of a dead end or an out-and-back. */
+function uTurns(route) {
+  const out = [];
+  const pts = route.filter((p, i) => i === 0 || distanceM(p, route[i - 1]) > 0.5);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+    const k = Math.cos((b.lat * Math.PI) / 180);
+    const ux = (b.lng - a.lng) * k, uy = b.lat - a.lat;
+    const vx = (c.lng - b.lng) * k, vy = c.lat - b.lat;
+    const cos = (ux * vx + uy * vy) / (Math.hypot(ux, uy) * Math.hypot(vx, vy));
+    if (cos < Math.cos((150 * Math.PI) / 180)) out.push(b);
+  }
+  return out;
+}
+
+// Brush points are queued and applied once per animation frame (one map redraw per frame, not per mouse move).
+let pending = [];
+let frame = 0;
+function paint(ll) {
+  pending.push({ lat: ll.lat, lng: ll.lng });
+  if (frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    const pts = pending;
+    pending = [];
+    let changed = false;
+    for (const h of DATA.houses) {
+      if (!pts.some((c) => distanceM(c, h) <= radius)) continue;
+      if (mode === "select" ? !selected.has(h.id) : selected.has(h.id)) changed = true;
+      if (mode === "select") selected.add(h.id);
+      else selected.delete(h.id);
+    }
+    if (changed) map.getSource("houses").setData(housesFc());
+  });
+}
+
+// Suggest reruns 300 ms after the last change, so several quick brush strokes cost one run.
+let runTimer = 0;
+const runSoon = () => {
+  clearTimeout(runTimer);
+  runTimer = setTimeout(run, 300);
+};
+
+let painting = false;
+map.on("mousedown", (e) => {
+  if (mode !== "select" && mode !== "deselect") return;
+  painting = true;
+  paint(e.lngLat);
+});
+map.on("mousemove", (e) => {
+  const brushOn = mode === "select" || mode === "deselect";
+  map.getSource("brush")?.setData(fc(brushOn ? [circle(e.lngLat, radius)] : []));
+  if (painting) paint(e.lngLat);
+});
+window.addEventListener("mouseup", () => {
+  if (!painting) return;
+  painting = false;
+  runSoon();
+});
+map.on("click", (e) => {
+  if (mode === "car") { car = { lat: e.lngLat.lat, lng: e.lngLat.lng }; run(); }
+  if (mode === "pin") { regroup = { lat: e.lngLat.lat, lng: e.lngLat.lng }; run(); }
+});
+
+document.querySelectorAll("[data-mode]").forEach((b) =>
+  b.addEventListener("click", () => {
+    mode = b.dataset.mode;
+    document.querySelectorAll("[data-mode]").forEach((x) => x.classList.toggle("on", x === b));
+    if (mode === "pan") map.dragPan.enable(); else map.dragPan.disable();
+    map.getSource("brush").setData(fc([]));
+  }),
+);
+document.getElementById("radius").addEventListener("input", (e) => { radius = Number(e.target.value); document.getElementById("rv").textContent = radius; });
+document.getElementById("crew").addEventListener("input", runSoon);
+document.getElementById("spd").addEventListener("input", runSoon);
+document.getElementById("cross").addEventListener("input", runSoon);
+document.getElementById("shuffle").addEventListener("click", () => { seed++; run(); });
+document.getElementById("clearpin").addEventListener("click", () => { regroup = null; run(); });
+document.getElementById("clearsel").addEventListener("click", () => { selected.clear(); map.getSource("houses").setData(housesFc()); run(); });
+
+// ---------- Copy data: the inputs (enough to rerun Suggest exactly) and a summary of what's shown ----------
+const r6 = (x) => Math.round(x * 1e6) / 1e6;
+const ll = (p) => (p ? [r6(p.lat), r6(p.lng)] : null);
+function snapshot() {
+  const opt = result?.options[chosen];
+  return {
+    kind: "knockd-suggest-viewer",
+    inputs: {
+      start: ll(car),
+      regroup: ll(regroup),
+      crew: Number(document.getElementById("crew").value),
+      secondsPerDoor: Number(document.getElementById("spd").value),
+      secondsPerCrossing: Number(document.getElementById("cross").value),
+      seed,
+      selectedHouseIds: [...selected].sort((a, b) => a - b),
+    },
+    view: { center: ll(map.getCenter()), zoom: Math.round(map.getZoom() * 10) / 10, chosenOption: chosen, hiddenGroups: [...hidden] },
+    runMs: Math.round(ms),
+    unroutedHouseIds: result?.unroutedHouseIds ?? [],
+    options: (result?.options ?? []).map((o, i) => ({
+      i,
+      label: o.label,
+      togetherMin: Math.round(o.togetherS / 6) / 10,
+      finishMin: Math.round(o.finishS / 6) / 10,
+      meet: ll(o.meetPoint),
+      groups: o.groups.map((g) => ({
+        members: g.memberIds,
+        doors: g.doors,
+        walkM: g.walkM,
+        finishMin: Math.round(g.finishS / 6) / 10,
+        end: ll(g.end),
+        uTurns: uTurns([...g.route, ...g.toMeet.slice(1)]).map(ll),
+        streetIds: g.streetIds,
+        // Only for the option on screen: who knocks which house, in order.
+        ...(i === chosen && { knocks: g.knocks.map((k) => [k.houseId, k.memberId]) }),
+      })),
+    })),
+  };
+}
+document.getElementById("copy").addEventListener("click", async (e) => {
+  const text = JSON.stringify(snapshot());
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  const b = e.currentTarget;
+  b.textContent = `Copied (${(text.length / 1024).toFixed(0)} KB)`;
+  setTimeout(() => (b.textContent = "Copy data"), 1500);
+});
+
+function run() {
+  const crew = Math.max(1, Math.min(8, Number(document.getElementById("crew").value) || 1));
+  const spd = Math.max(1, Number(document.getElementById("spd").value) || 60);
+  if (!selected.size) { result = null; chosen = 0; draw(); return; }
+  const memberIds = Array.from({ length: crew }, (_, i) => `P${i + 1}`);
+  const t0 = performance.now();
+  result = suggestRoutes({
+    streets: DATA.streets,
+    houses: DATA.houses.filter((h) => selected.has(h.id)),
+    memberIds, start: car, regroup, secondsPerDoor: spd, secondsPerCrossing: Math.max(0, Number(document.getElementById("cross").value) || 0), random: mulberry(seed),
+  });
+  ms = performance.now() - t0;
+  car = result.start;
+  if (regroup) regroup = result.regroup;
+  chosen = 0;
+  hidden = new Set();
+  draw();
+}
+
+const colourOf = (memberId) => PALETTE[Number(memberId.slice(1)) - 1];
+
+// Hidden groups (by index) for the chosen option. Reset when the option or result changes.
+let hidden = new Set();
+
+// Route layers are rebuilt on every draw: one white casing per group, and one dashed layer per
+// member. A group's dash cycles through its members' colours: [A][B][gap] for a pair.
+let routeLayers = [];
+const DASH = 1.6; // dash length per member, in line widths
+const GAP = 1.2;
+function drawRoutes(opt) {
+  for (const id of routeLayers) map.removeLayer(id);
+  routeLayers = [];
+  if (!opt) return;
+  const n = opt.groups.length;
+  opt.groups.forEach((g, i) => {
+    if (hidden.has(i)) return;
+    const offset = (i - (n - 1) / 2) * 6; // side by side where routes share a street
+    const filter = ["==", ["get", "group"], i];
+    const walk = `walk-${i}`;
+    map.addLayer({ id: walk, type: "line", source: "walkback", filter, layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": colourOf(g.memberIds[0]), "line-width": 3, "line-offset": offset, "line-dasharray": [0.1, 2], "line-opacity": 0.9 } }, "numbers");
+    routeLayers.push(walk);
+    const casing = `route-${i}-casing`;
+    map.addLayer({ id: casing, type: "line", source: "routes", filter, layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.85, "line-offset": offset } }, "numbers");
+    routeLayers.push(casing);
+    const k = g.memberIds.length;
+    g.memberIds.forEach((m, j) => {
+      // Member j's dash starts after j other members' dashes, then waits for the rest + the gap.
+      const dash = j === 0 ? [DASH, (k - 1) * DASH + GAP] : [0, j * DASH, DASH, (k - 1 - j) * DASH + GAP];
+      const id = `route-${i}-${j}`;
+      map.addLayer({ id, type: "line", source: "routes", filter, layout: { "line-join": "round" },
+        paint: { "line-color": colourOf(m), "line-width": 4, "line-offset": offset, "line-dasharray": dash } }, "numbers");
+      routeLayers.push(id);
+    });
+  });
+}
+
+function draw() {
+  if (!map.getSource("points")) return;
+  const pts = [pointF(car, { kind: "car" })];
+  if (regroup) pts.push(pointF(regroup, { kind: "pin" }));
+  const routes = [];
+  const opt = result?.options[chosen];
+  if (opt) {
+    opt.groups.forEach((g, i) => {
+      routes.push({ type: "Feature", properties: { group: i }, geometry: { type: "LineString", coordinates: g.route.map((p) => [p.lng, p.lat]) } });
+      if (!hidden.has(i)) pts.push(pointF(g.end, { kind: "end", colour: colourOf(g.memberIds[0]) }));
+    });
+    pts.push(pointF(opt.meetPoint, { kind: "meet" }));
+  }
+  map.getSource("routes").setData(fc(routes));
+  map.getSource("walkback").setData(fc((opt?.groups ?? []).flatMap((g, i) =>
+    g.toMeet.length > 1 ? [{ type: "Feature", properties: { group: i }, geometry: { type: "LineString", coordinates: g.toMeet.map((p) => [p.lng, p.lat]) } }] : [])));
+  map.getSource("points").setData(fc(pts));
+  drawRoutes(opt);
+  colourHouses(opt);
+  map.getSource("houses").setData(housesFc());
+  map.getSource("numbers").setData(fc([...houseNumber].map(([id, n]) => pointF(houseById.get(id), { img: numberIcon(n, houseColour.get(id)) }))));
+  const turns = [];
+  opt?.groups.forEach((g, i) => {
+    if (hidden.has(i)) return;
+    const img = uturnIcon(colourOf(g.memberIds[0]));
+    for (const p of uTurns([...g.route, ...g.toMeet.slice(1)])) turns.push(pointF(p, { img }));
+  });
+  map.getSource("uturns").setData(fc(turns));
+
+  const stat = document.getElementById("stat");
+  const opts = document.getElementById("opts");
+  opts.innerHTML = "";
+  if (!result) { stat.textContent = "Drag on the map to select houses."; return; }
+  stat.textContent = `${selected.size} houses selected · ${ms.toFixed(0)} ms` +
+    (result.unroutedHouseIds.length ? ` · ${result.unroutedHouseIds.length} unrouted (no street)` : "");
+  result.options.forEach((o, i) => {
+    const el = document.createElement("div");
+    el.className = "opt" + (i === chosen ? " on" : "");
+    el.innerHTML = `<b>${i + 1}. ${o.label}</b><div class="t">back together ${mins(o.togetherS)} · last group done ${mins(o.finishS)}</div>`;
+    if (i === chosen) {
+      o.groups.forEach((g, gi) => {
+        const row = document.createElement("div");
+        row.className = "grp";
+        row.style.opacity = hidden.has(gi) ? 0.45 : 1;
+        row.innerHTML = `<input type="checkbox" ${hidden.has(gi) ? "" : "checked"} title="Show this route" />
+          <span>${g.memberIds.map((m) => `<span class="chip" style="background:${colourOf(m)}"></span>`).join("")}</span>
+          <span style="flex:1">${g.doors} doors · ${(g.walkM / 1000).toFixed(2)} km · done ${mins(g.finishS)}${uTurns([...g.route, ...g.toMeet.slice(1)]).length ? ` · ${uTurns([...g.route, ...g.toMeet.slice(1)]).length} U-turn${uTurns([...g.route, ...g.toMeet.slice(1)]).length > 1 ? "s" : ""}` : ""}</span>
+          <button class="only" title="Show only this route">only</button>`;
+        row.querySelector("input").addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (hidden.has(gi)) hidden.delete(gi); else hidden.add(gi);
+          draw();
+        });
+        row.querySelector(".only").addEventListener("click", (e) => {
+          e.stopPropagation();
+          const alreadyOnly = hidden.size === o.groups.length - 1 && !hidden.has(gi);
+          hidden = alreadyOnly ? new Set() : new Set(o.groups.map((_, x) => x).filter((x) => x !== gi));
+          draw();
+        });
+        el.appendChild(row);
+      });
+    }
+    el.addEventListener("click", () => { if (chosen !== i) { chosen = i; hidden = new Set(); draw(); } });
+    opts.appendChild(el);
+  });
+}
+</script>
+</body>
+</html>

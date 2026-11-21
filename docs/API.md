@@ -275,12 +275,12 @@ The snapshot (`GET /v1/sessions/:id`) includes the same `plan` and its version a
 
 **Staying in sync:** keep the latest `version` you've seen. On `plan:updated`, ignore it if its version is older than yours; if it's more than one ahead (you missed an update, e.g. a signal drop), refetch `GET /plan`. Also refetch on reconnect. When debugging, two phones with the same version have identical plans.
 
-### `GET /v1/sessions/:id/knock-rate` 🎟️
+### `GET /v1/sessions/:id/door-time` 🎟️
 
-The crew's knock rate, for Suggest. Currently always the default; will be learned from team history.
+Seconds per door, for Suggest (which runs on the phone: `suggestRoutes` in `@knockd/shared`). Currently always the default of 60; will be learned from team history.
 
 ```ts
-→ { housesPerHourPerGroup: number, source: "history" | "default" }
+→ { secondsPerDoor: number, source: "history" | "default" }
 ```
 
 ---

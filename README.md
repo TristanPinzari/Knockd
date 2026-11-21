@@ -96,7 +96,7 @@ Walking past a street isn't the same as knocking it. Each street is classified u
 
 ### Planning mode
 
-> **Backend built** (claims, routes, freehand, notes, clear-mine; see "Planning" in [docs/API.md](docs/API.md)). **Suggest is designed but not built yet.**
+> **Backend built** (claims, routes, freehand, notes, clear-mine; see "Planning" in [docs/API.md](docs/API.md)). **Suggest is built and tested** in `@knockd/shared` (`suggestRoutes`), ready for the phone UI.
 
 Replaces the screenshot-and-draw huddle at the car. **One shared plan per session**, edited live by anyone, with everyone seeing changes instantly. **No groups to set up and no draft/Apply step.** It supports however a crew likes to plan: people claiming their own areas, an organiser assigning others, pairs, or just sketching routes.
 
@@ -124,18 +124,21 @@ Replaces the screenshot-and-draw huddle at the car. **One shared plan per sessio
    - **Solo**, **pairs**, **half the crew** and **everyone together** (for 8 people: solo, pairs, quads, all together). Odd numbers form one trio or a solo
 4. **Options are ranked by effectiveness**: the most doors in the least time, and everyone ending up close together:
    - **Score = when the last group finishes + time for everyone to regroup** (at the pin, or wherever groups end closest)
-   - Every door counts the same. Time = walking (~1.3 m/s) + a fixed ~1 minute per door, with doors shared within a group (e.g. one person per side of the street) while walking isn't
+   - Every door counts the same. Time = walking (~1.3 m/s) + a fixed ~1 minute per door + ~15 s per road crossing, with doors shared within a group while walking isn't
+   - **Crossing the road costs time.** A group walks a street once with one person per side. A solo on a street with houses on both sides goes down one side and back up the other (zigzagging only when that's cheaper, e.g. very few doors). That's why pairs often win on dense two-sided streets
    - Shown like _"Pairs: done ~7:35 pm · regroup near Oakridge & Elm"_
-5. **Picking an option** draws a dashed **route per group** in its members' colours and claims their blocks. It replaces the current plan for those houses. Group members are assigned randomly and are easy to swap
+5. **Picking an option** draws a dashed **route per group** in its members' colours and claims their blocks. It replaces the current plan for those houses (and the crew's old dashed routes). Group members are assigned randomly and are easy to swap
 6. **Everyone can edit the result:** the routes and claims are ordinary plan items, so anyone in the session can erase, redraw, claim or unclaim them, like any other drawing. Only "clear mine" and undo are limited to whoever applied the suggestion
 
 How it plans:
 
-- Builds a **street network** from the streets the phone already has (segments meet at intersections). Selected houses mark which street segments must be walked
-- For each option, splits the work into groups **radiating out from the car** like pizza slices, so everyone starts knocking right away, balanced by **number of doors** with **compactness** as a tiebreaker
-- Builds a route through each group's streets, aiming to end near the others or the regroup pin, and tries a few variants per option, keeping the best
-- Examples it should get right: with the car at the bottom of a 2×2 square of blocks, **pairs** each take a bottom then top square and all finish together at the top, which beats 4 solos where two first walk past blocks without knocking. With the car in the middle, **solos** each take a quadrant and loop back to the car
-- Good heuristics, not a perfect solution (multi-person street routing is a hard problem), and fast enough for a phone
+- Builds a **street network** from the streets the phone already has (segments meet at intersections). Selected houses mark which streets must be walked, and **how far along**: a street the circle only clips, or a dead end, is walked out to the last selected door and back instead of end to end
+- For each option, splits the streets into groups **radiating out from the car** like pizza slices, so everyone starts knocking right away, balanced by **estimated time** (walking + doors ÷ group size). Several slice angles are tried per option, keeping the best
+- Each group takes its streets nearest first, then the order and direction are improved to cut wasted walking, ending near the regroup pin or the spot that gets everyone together soonest
+- Each group also gets its **knock order**: who knocks which door, in order, from three simple rules. On a two-sided street each person keeps their side (left or right) for the whole route, with no crossing mid-street. On a one-sided street the next door goes to whoever has knocked the fewest so far (a pair leapfrogs A, B, A, B). The houses round the turning circle of a dead end are split into two unbroken runs, one from each side, so totals even out. People aren't tied together: whoever has fewer doors gets ahead, and a group finishes when its busiest person does
+- Examples it gets right (they're unit tests): with the car at the bottom of a 2×2 square of blocks (houses on both sides), nobody is sent to the far squares first: **pairs** start knocking right at the car, one per side, and both finish together at the top. With the car in the middle, **solos** each take a quadrant and loop back to the car
+- Good heuristics, not a perfect solution (multi-person street routing is a hard problem). Fast on a phone: about 100 to 250 ms for 500 houses on real London streets
+- **Try it:** open [docs/suggest-viewer.html](docs/suggest-viewer.html) in a browser. It runs the real Suggest on London streets around the demo spot: paint houses, move the car and regroup pin, and see each option's routes, who knocks which door, and U-turns. Rebuild after changing Suggest with `pnpm rebuild:suggest-viewer`
 
 **Team layers:** when the session loads team data, the web's **highlights** and **team notes** appear as **read-only** layers that each person can toggle on or off.
 

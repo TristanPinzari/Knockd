@@ -5,3 +5,4 @@ export * from "./api";
 export * from "./socket";
 export * from "./plan";
 export * from "./trail";
+export * from "./suggest";

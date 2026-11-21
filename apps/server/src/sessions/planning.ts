@@ -8,12 +8,12 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   applyPlanEdit,
-  DEFAULT_HOUSES_PER_HOUR_PER_GROUP,
+  DEFAULT_SECONDS_PER_DOOR,
   EMPTY_PLAN,
   memberIdsIn,
   PlanEditError,
   type GetSessionPlanRes,
-  type KnockRateRes,
+  type DoorTimeRes,
   type PlanContent,
   type PlanEditOp,
 } from "@knockd/shared";
@@ -71,11 +71,11 @@ export function editPlan(sessionId: string, authorId: string, op: PlanEditOp): P
 }
 
 /**
- * Houses per hour per person or pair, for on-device suggestions.
- * TODO: once sessions are uploaded to teams, use the team's history from knock_rate_hourly.
+ * Seconds per door, for Suggest on the phone.
+ * TODO: once sessions are uploaded to teams, learn it from the team's history (knock_rate_hourly).
  */
-export async function getKnockRate(_sessionId: string): Promise<KnockRateRes> {
-  return { housesPerHourPerGroup: DEFAULT_HOUSES_PER_HOUR_PER_GROUP, source: "default" };
+export async function getDoorTime(_sessionId: string): Promise<DoorTimeRes> {
+  return { secondsPerDoor: DEFAULT_SECONDS_PER_DOOR, source: "default" };
 }
 
 async function assertLive(sessionId: string) {
