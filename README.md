@@ -33,7 +33,7 @@ It has two parts:
 
 ## Mobile App (Phase 1)
 
-The mobile app is only about **today**: the live session, the plan, and the stats. Anything about history and how long since an area was knocked belongs in the web app.
+The mobile app is focused on **today**: the live session, the plan, and the stats. Analysis of history belongs in the web app. The one exception is team data the session creator chooses to load (see "Loading team data into a session").
 
 ### Sessions
 - Create a session and share a join code. Joining needs no account, just a name
@@ -73,6 +73,8 @@ Replaces screenshot-and-draw. A shared planning screen inside the session:
 ### Sales
 - Every house is assumed no sale. No need to keep the app open to log each door
 - **Long-press a house** to mark a sale (not double-tap, which zooms the map), with a quick undo
+- **Live sale alert:** when someone makes a sale, everyone in the session gets a notification ("Jas just closed a sale on Oak St!") and the house lights up on their map
+- **Leaderboard:** a small in-session leaderboard of sales per person
 
 ### End-of-day stats
 Plain stats, per person and for the crew: streets worked vs passed, blocks completed, houses covered, sales, distance, active time.
@@ -80,6 +82,19 @@ Plain stats, per person and for the crew: streets worked vs passed, blocks compl
 ### Uploading to a team
 - At the end of a session, everyone in it who's on a team gets a prompt listing their teams: "Add to London Painters?"
 - Plans from the team's plan library can be loaded into planning mode as a starting point (see Web App)
+
+### Loading team data into a session
+Crews use previous customers nearby as references ("we just painted the Hendersons' place down the street"). So a session can show data from a team map:
+- When creating a session, a creator with an account can pick one of their team maps (e.g. London D2D) and choose which data to load:
+  - **Previous customers:** houses marked as a sale in past sessions, with how long ago. On by default
+  - **Past coverage:** "hit X time ago" paths, with the same fading as the web map
+  - **Sale-rate colours:** blocks coloured green to red
+- Only data inside the session's area is loaded, and it's downloaded when the session starts so it works offline
+- Previous customers show a small badge on the house. Tap it to see "Sale · 8 months ago"
+- **Everyone in the session sees loaded data**, including guests
+- Each person can toggle each layer on or off on their own phone, so the map doesn't get cluttered
+- Off by default, so the live map stays focused on today unless the creator loads something
+- *Nice to have:* planning suggestions that prefer blocks near previous customers
 
 ### Offline
 - GPS points, sales and planning changes are stored on the phone (SQLite), each with a unique ID
@@ -149,6 +164,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - Joining a live session: no account needed, just a code and a name
 - Uploading to a team and viewing team maps: account and team membership required
 - **Uploading:** at the end of a session, anyone in it who's on a team can upload it. Uploads are deduplicated by (team, session ID), so if everyone taps "add" it's only stored once. A session can go to more than one team, once each
+- **Loaded team data** (e.g. previous customers) is visible to everyone in the session, including guests, since anyone knocking benefits from references
 - **Everyone's paths are uploaded**, including guests without accounts. The join screen says so: "your path may be saved to the crew's team map"
 - **Grace period:** session data stays on the server for about 7 days so someone can upload it later if everyone skipped the prompt or a phone died. Sessions nobody uploads are deleted after that
 - After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and sales are saved. The raw GPS points are deleted
@@ -205,6 +221,8 @@ Later, Firebase could take over the live layer (offline queueing, auto-reconnect
 
 Validated market (D2D software is a real category) but the lightweight peer-coordination niche is unserved. Target users: summer sales crews, painting companies, fundraising canvassers, political canvassing teams, small field sales teams. All informal, price-sensitive, coordination-heavy.
 
+**Pricing:** the mobile app (live sessions) is free. Teams, team maps and the web app are paid. No paywall for the hackathon.
+
 ## Hackathon
 
 **Prizes we're targeting:**
@@ -218,6 +236,11 @@ Validated market (D2D software is a real category) but the lightweight peer-coor
 - Best Use of Gemini: only if the "ask your data" add-on gets built
 
 Check how many prize tracks one project can enter.
+
+**Who does what:**
+- Gansi: backend (server, database, map matching, deployment)
+- Jasmine: mobile app
+- Web app: split once those are done
 
 **Priorities:**
 1. Mobile: sessions, live map, worked vs passed-by streets, blocks, sales, planning mode, simulated crew mode
