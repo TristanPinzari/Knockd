@@ -325,7 +325,7 @@ Session history.
 
 ### `GET /v1/teams/:id/sessions/:sessionId` 👤
 
-Session detail for replay: members, matched paths, street coverage, leads and stats. **Not built yet** (needs end-of-session processing).
+Session detail for replay: members, matched paths (properties `{ memberId, distanceM }`), street coverage (`{ memberId, streetId, durationS, classification, firstSeen, lastSeen }`), leads with positions and final stats. Uses processed results, so it works after raw GPS points are deleted.
 
 ### `DELETE /v1/teams/:id/sessions/:sessionId` 🛡️
 

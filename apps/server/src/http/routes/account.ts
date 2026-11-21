@@ -22,6 +22,7 @@ import { z } from "zod";
 import { accountUser, forgetUser, requireAccount } from "../../auth/account";
 import * as maps from "../../maps/service";
 import * as plans from "../../plans/service";
+import { getTeamSession } from "../../teams/replay";
 import * as teams from "../../teams/service";
 import { parse } from "../errors";
 
@@ -107,6 +108,11 @@ accountRouter.post("/teams/:teamId/sessions", async (req, res) => {
 accountRouter.get("/teams/:teamId/sessions", async (req, res) => {
   const range = parse(DateRangeQuery, req.query);
   res.json({ sessions: await teams.listTeamSessions(parse(Uuid, req.params.teamId), uid(res), range) });
+});
+
+// Session replay: one uploaded session's paths, coverage, leads and stats.
+accountRouter.get("/teams/:teamId/sessions/:sessionId", async (req, res) => {
+  res.json(await getTeamSession(parse(Uuid, req.params.teamId), uid(res), parse(Uuid, req.params.sessionId)));
 });
 
 accountRouter.delete("/teams/:teamId/sessions/:sessionId", async (req, res) => {
