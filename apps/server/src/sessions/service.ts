@@ -25,6 +25,7 @@ import { db } from "../db/client";
 import { chatMessages, leads, maps, pins, sessionCells, sessionMembers, sessionPlans, sessions } from "../db/schema";
 import { forbidden, HttpError, notFound } from "../http/errors";
 import { enqueueProcessing } from "../jobs/scheduler";
+import { getMap } from "../maps/service";
 import { disconnectMember, emitToSession, isOnline } from "../realtime/io";
 import { toLead, toMessage, toPin } from "./dto";
 
@@ -40,7 +41,7 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null);
 export async function createSession(body: CreateSessionBody, userId?: string): Promise<SessionAccessRes> {
   if (body.loadMap) {
     if (!userId) throw new HttpError(401, "unauthorized", "Log in to load team data");
-    throw new HttpError(400, "invalid_request", "Loading team data isn't available yet");
+    await getMap(body.loadMap.mapId, userId); // 404 unless the map is on one of your teams
   }
 
   const area = plannedAreaSql(body.area);
@@ -51,7 +52,13 @@ export async function createSession(body: CreateSessionBody, userId?: string): P
       const { sessionId, memberId } = await db.transaction(async (tx) => {
         const [session] = await tx
           .insert(sessions)
-          .values({ joinCode: newJoinCode(), plannedArea: area, createdByUserId: userId })
+          .values({
+            joinCode: newJoinCode(),
+            plannedArea: area,
+            createdByUserId: userId,
+            loadedMapId: body.loadMap?.mapId,
+            loadedLayers: body.loadMap?.layers ?? [],
+          })
           .returning({ id: sessions.id });
         const [member] = await tx
           .insert(sessionMembers)

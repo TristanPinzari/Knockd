@@ -14,6 +14,8 @@ import {
   Uuid,
 } from "@knockd/shared";
 import { maybeAccountUser, optionalAccount } from "../../auth/account";
+import { sessionLayers } from "../../maps/service";
+import * as plans from "../../plans/service";
 import * as planning from "../../sessions/planning";
 import * as sessions from "../../sessions/service";
 import { getStats } from "../../sessions/stats";
@@ -49,6 +51,12 @@ sessionsRouter.get("/:id", async (_req, res) => {
 sessionsRouter.get("/:id/area", async (req, res) => {
   const { cells } = parse(CellsQuery, req.query);
   res.json(await sessions.getArea(sessionCtx(res).sessionId, cells));
+});
+
+// Team data the creator loaded (previous leads, past coverage, lead-rate colours) for these cells.
+sessionsRouter.get("/:id/layers", async (req, res) => {
+  const { cells } = parse(CellsQuery, req.query);
+  res.json(await sessionLayers(sessionCtx(res).sessionId, cells));
 });
 
 sessionsRouter.get("/:id/stats", async (_req, res) => {
@@ -127,9 +135,11 @@ sessionsRouter.post("/:id/plan/apply", async (_req, res) => {
   res.json({ applied: await planning.applyDraft(sessionCtx(res).sessionId) });
 });
 
-sessionsRouter.post("/:id/plan/load", async (req, _res) => {
-  parse(LoadPlanBody, req.body);
-  throw new HttpError(401, "unauthorized", "Loading a saved plan needs an account (coming soon)");
+// Load a plan from the team library into the draft. The member must have joined while logged in.
+sessionsRouter.post("/:id/plan/load", async (req, res) => {
+  const { sessionId, memberId } = sessionCtx(res);
+  const { planId } = parse(LoadPlanBody, req.body);
+  res.json({ draft: await plans.loadPlanIntoSession(sessionId, memberId, planId) });
 });
 
 sessionsRouter.get("/:id/knock-rate", async (_req, res) => {
