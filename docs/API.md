@@ -138,7 +138,15 @@ Streets, blocks and houses for the given cells, as GeoJSON. Adds the cells to th
 
 ```ts
 → { cells: { id, streets: FeatureCollection, blocks: FeatureCollection, houses: FeatureCollection }[] }
+// Feature properties:
+//   streets: { streetId, name, lengthM }             (LineString)
+//   blocks:  { blockId, houseCount }                 (Polygon)
+//   houses:  { houseId, blockId, streetId }          (Polygon, simplified)
 ```
+
+- Up to 25 cells per request
+- Each house belongs to exactly one cell (by its centre). **Streets and blocks that cross a cell edge appear in both cells**, so dedupe by `streetId` / `blockId`
+- Send `Accept-Encoding: gzip` (most HTTP clients do by default): a dense 2-cell area is ~275 KB raw, ~47 KB gzipped
 
 ### `GET /v1/sessions/:id/layers?cells=...` 🎟️
 
