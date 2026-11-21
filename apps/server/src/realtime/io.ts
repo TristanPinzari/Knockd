@@ -4,7 +4,7 @@
  */
 import type { Server as HttpServer } from "node:http";
 import { and, eq, isNull } from "drizzle-orm";
-import { Server } from "socket.io";
+import { Server, type Socket } from "socket.io";
 import { SocketAuth, type ClientToServerEvents, type ServerToClientEvents } from "@knockd/shared";
 import { verifySessionToken, type SessionClaims } from "../auth/session-token";
 import { db } from "../db/client";
@@ -14,6 +14,7 @@ import { logger } from "../logger";
 
 type SocketData = SessionClaims;
 type KnockdServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
+export type KnockdSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
 let io: KnockdServer | null = null;
 
@@ -42,7 +43,8 @@ export async function disconnectMember(sessionId: string, memberId: string): Pro
   for (const s of sockets) if (s.data.memberId === memberId) s.disconnect(true);
 }
 
-export function createRealtime(server: HttpServer): KnockdServer {
+/** `onConnection` registers client → server event handlers for each authenticated socket. */
+export function createRealtime(server: HttpServer, onConnection?: (socket: KnockdSocket) => void): KnockdServer {
   io = new Server(server, { cors: { origin: corsOrigin }, serveClient: false });
 
   io.use(async (socket, next) => {
@@ -74,6 +76,7 @@ export function createRealtime(server: HttpServer): KnockdServer {
     members.set(memberId, count);
     if (count === 1) emitToSession(sessionId, "member:status", { memberId, online: true });
     logger.debug({ sessionId, memberId }, "socket connected");
+    onConnection?.(socket);
 
     socket.on("disconnect", () => {
       const remaining = (members.get(memberId) ?? 1) - 1;

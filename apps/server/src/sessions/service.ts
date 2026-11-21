@@ -25,6 +25,7 @@ import { db } from "../db/client";
 import { chatMessages, leads, maps, pins, sessionCells, sessionMembers, sessionPlans, sessions } from "../db/schema";
 import { forbidden, HttpError, notFound } from "../http/errors";
 import { disconnectMember, emitToSession, isOnline } from "../realtime/io";
+import { toLead, toMessage, toPin } from "./dto";
 
 /** Distinct, colour-blind-friendly-ish member colours, assigned in order. */
 const MEMBER_COLOURS = ["#E4572E", "#2E86AB", "#F2A541", "#7B2CBF", "#2A9D8F", "#D81E5B", "#5C946E", "#3D405B"];
@@ -141,29 +142,10 @@ export async function getSnapshot(sessionId: string): Promise<SessionSnapshotRes
   return {
     session,
     members,
-    leads: leadRows.map((l) => ({
-      clientId: l.id,
-      memberId: l.memberId,
-      houseId: l.houseId,
-      grade: l.grade,
-      note: l.note,
-      createdAt: l.createdAt.toISOString(),
-      updatedAt: l.updatedAt.toISOString(),
-    })),
-    pins: pinRows.map((p) => ({
-      clientId: p.id,
-      memberId: p.memberId,
-      lat: p.lat,
-      lng: p.lng,
-      createdAt: p.createdAt.toISOString(),
-    })),
+    leads: leadRows.map(toLead),
+    pins: pinRows.map(toPin),
     plan: { draft: plan[0]?.draft ?? EMPTY_PLAN, applied: plan[0]?.applied ?? null },
-    messages: messageRows.reverse().map((m) => ({
-      clientId: m.id,
-      memberId: m.memberId,
-      body: m.body,
-      createdAt: m.createdAt.toISOString(),
-    })),
+    messages: messageRows.reverse().map(toMessage),
   };
 }
 
