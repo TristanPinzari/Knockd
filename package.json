@@ -10,7 +10,8 @@
     "lint": "pnpm -r --filter \"!knockd\" --if-present lint",
     "test": "pnpm -r --filter \"!knockd\" --if-present test",
     "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test",
-    "rebuild:suggest-viewer": "pnpm --filter @knockd/server suggest:viewer"
+    "rebuild:suggest-viewer": "pnpm --filter @knockd/server suggest:viewer",
+    "open:suggest": "pnpm --filter @knockd/server suggest:open"
   },
   "lint-staged": {
     "*": "prettier --write --ignore-unknown"
