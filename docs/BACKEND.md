@@ -129,13 +129,13 @@ Imported once per region by scripts.
 
 ## Tiger Data features
 
-| Feature               | Used for                                                                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Hypertable            | `pings`, partitioned by time                                                                                                       |
-| Retention policy      | Drop raw pings older than 7 days. This is the grace period, handled by the database with no code                                   |
-| Compression policy    | Compress pings older than 1 day                                                                                                    |
-| Continuous aggregates | Knock rate per crew (houses worked per hour, used as the planning default), leads over time per team, coverage per week            |
-| PostGIS               | Streets, blocks, houses, census areas, map matching results, `ST_AsGeoJSON` for map queries, `ST_Intersects` with a map's boundary |
+| Feature               | Used for                                                                                                                                                                                                                                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Hypertables           | `pings` (by time), `leads` (by `created_at`), `session_street_coverage` (by `first_seen`). Time columns are part of each primary key                                                                                                                                                                                                       |
+| Retention policy      | Drop raw pings older than 7 days. This is the grace period, handled by the database with no code                                                                                                                                                                                                                                           |
+| Compression policy    | Compress pings older than 1 day, segmented by session and member, ordered by time and client ID                                                                                                                                                                                                                                            |
+| Continuous aggregates | `member_activity_1m` (active minutes; outlives the 7-day ping retention), `leads_hourly` (A/B/C per member per hour, undos excluded), `knock_rate_hourly` (houses on worked streets per hour of work, the learned knock rate). All real-time. Defined in `src/db/continuous-aggregates.sql`, applied by `db:migrate` outside a transaction |
+| PostGIS               | Streets, blocks, houses, census areas, map matching results, `ST_AsGeoJSON` for map queries, `ST_Intersects` with a map's boundary                                                                                                                                                                                                         |
 
 ---
 
