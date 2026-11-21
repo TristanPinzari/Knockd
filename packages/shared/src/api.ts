@@ -395,13 +395,18 @@ export type GeoBlocksQuery = z.infer<typeof GeoBlocksQuery>;
 export const GeoBlocksRes = FeatureCollectionGeo;
 export type GeoBlocksRes = z.infer<typeof GeoBlocksRes>;
 
-// ============================== Dev ==============================
+// ============================== Simulated crew ==============================
+
+/**
+ * demo: ~10 s per door (~2 km/h), so the map fills in quickly.
+ * realistic: ~1 min per door, like a real rep.
+ */
+export const SimPace = z.enum(["demo", "realistic"]);
+export type SimPace = z.infer<typeof SimPace>;
 
 export const StartSimBody = z.object({
-  sessionId: Uuid,
-  bots: z.number().int().min(1).max(8),
-  /** Optional LineString route; otherwise bots walk generated routes through nearby blocks. */
-  route: z.unknown().optional(),
+  bots: z.number().int().min(1).max(7),
+  pace: SimPace.default("demo"),
 });
 export type StartSimBody = z.infer<typeof StartSimBody>;
 export const StartSimRes = z.object({ botMemberIds: z.array(Uuid) });

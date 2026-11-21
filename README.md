@@ -319,7 +319,9 @@ Check how many prize tracks one project can enter.
 - Basic Expo dev build with background location and MapLibre running on both an iPhone and an Android
 - Vultr VM and Tiger Data instance created, domain registered and pointed at the VM
 - Agree on the shared types (`packages/shared`) so both sides can build against a mock server
-- Block data and map tiles prepared for one London demo neighbourhood
+- Map tiles prepared for London (block, street and house data is already imported)
+
+**Demo location:** Byron, centred on **42.9550, -81.3425** (the densest residential spot: ~520 houses within 400 m)
 
 **Biggest risks:**
 

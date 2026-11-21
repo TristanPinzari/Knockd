@@ -390,17 +390,28 @@ The basemap as a Protomaps PMTiles file, for MapLibre. Supports HTTP range reque
 
 ---
 
-## Dev only
+## Simulated crew
 
-Disabled in production.
+Bots that join a session and walk real streets, for the demo and for testing indoors. Works on the live server.
 
-### `POST /v1/dev/sim`
+### `POST /v1/sessions/:id/sim` 🎟️
 
-Start a simulated crew in a session.
+Session admin only, live sessions only.
 
 ```ts
-{ sessionId, bots: number, route?: GeoJSON } → { botMemberIds: string[] }
+{ bots: 1–7, pace?: "demo" | "realistic" } → { botMemberIds: string[] }   // 201
+// demo (default): ~10 s per door, ~2 km/h. realistic: ~1 min per door
 ```
+
+- Bots join as normal members named like `Alex (sim)`, with `isBot: true`, their own colour, and online status. They count toward the 8-member limit (`409 session_full`)
+- Each bot walks the street segments of its blocks: its blocks in the applied plan if it's in a group, otherwise a slice of the planned area
+- They send pings exactly like a phone (a GPS point every 5 s, uploaded every 15 s), so apps get normal `positions`, and occasionally mark A/B/C leads (`lead:new`)
+- They stop automatically when the session ends
+- Errors: `403` (not the admin), `409` (already running), `410` (session ended), `400` (no houses in the area)
+
+### `DELETE /v1/sessions/:id/sim` 🎟️
+
+Session admin only. Stops the bots and removes them from the session (`member:left` for each). `404` if none are running.
 
 ---
 
