@@ -72,7 +72,7 @@ docker-compose.yml
 
 ## Data model
 
-A first draft. Names and columns will change as the API is designed.
+An overview. The source of truth is the Drizzle schema in [apps/server/src/db/schema.ts](../apps/server/src/db/schema.ts), with migrations in `apps/server/drizzle/`. API types are in [packages/shared/src](../packages/shared/src).
 
 ### Accounts and teams
 | Table | Key columns |

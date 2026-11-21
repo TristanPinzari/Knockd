@@ -1,0 +1,14 @@
+{
+  "name": "knockd",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "typecheck": "pnpm -r --filter \"!knockd\" typecheck"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "typescript": "~5.8"
+  }
+}
