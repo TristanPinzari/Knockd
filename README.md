@@ -41,7 +41,7 @@ It has two parts:
 1. Crew pulls up to an area
 2. One person creates a session, picks the area (pin + radius, or draw it), and shares a code
 3. Everyone joins — each person appears as a different coloured dot on the map
-4. The crew plans together in **planning mode**: Knockd splits the area into blocks, the crew assigns blocks to people or pairs (or taps Suggest), then applies the plan to the shared map
+4. The crew plans together in **planning mode**, live on everyone's phone: claim blocks, sketch routes and drop notes, or select houses and tap Suggest for ranked routes
 5. As people move, they leave a coloured trail behind them
 6. Streets get "painted" as they're worked, and blocks fill in as their streets are covered
 7. Leads are marked with a long-press on the house and graded A, B or C; everything else is assumed no lead
@@ -112,7 +112,7 @@ Replaces the screenshot-and-draw huddle at the car. **One shared plan per sessio
 - **Route:** a dashed line with an arrow tip ("Jasmine, go this way"). Works house by house, without blocks
 - **Freehand:** a solid line, for circling or marking boundaries
 - **Note:** short text on the map
-- **Eraser:** drag over the map, and any drawing it touches is removed whole
+- **Eraser:** drag over the map, and any drawing it touches is removed whole, **whoever drew it**. Anyone can also unclaim any block or remove any note. No need to ask someone to delete their own
 - **Undo / redo:** only your own actions, never a teammate's
 - **Clear:** removes only **your own** drawings, notes and claims. Every item records who made it, separately from who it's for
 
@@ -126,7 +126,8 @@ Replaces the screenshot-and-draw huddle at the car. **One shared plan per sessio
    - **Score = when the last group finishes + time for everyone to regroup** (at the pin, or wherever groups end closest)
    - Every door counts the same. Time = walking (~1.3 m/s) + a fixed ~1 minute per door, with doors shared within a group (e.g. one person per side of the street) while walking isn't
    - Shown like _"Pairs: done ~7:35 pm · regroup near Oakridge & Elm"_
-5. **Picking an option** draws a dashed **route per group** in its members' colours and claims their blocks. It replaces the current plan for those houses, and everything stays editable. Group members are assigned randomly and are easy to swap
+5. **Picking an option** draws a dashed **route per group** in its members' colours and claims their blocks. It replaces the current plan for those houses. Group members are assigned randomly and are easy to swap
+6. **Everyone can edit the result:** the routes and claims are ordinary plan items, so anyone in the session can erase, redraw, claim or unclaim them, like any other drawing. Only "clear mine" and undo are limited to whoever applied the suggestion
 
 How it plans:
 
@@ -370,7 +371,7 @@ Check how many prize tracks one project can enter.
 **Demo (about 3 minutes):**
 
 1. Show the web team map with weeks of seeded Byron history (`pnpm --filter @knockd/server seed:demo`: 12 sessions, 93 leads, lead-rate colours)
-2. On the phone, create a session, pick an area, tap Suggest
+2. On the phone, create a session, select houses with the circle brush, tap Suggest and pick the top-ranked option
 3. Start simulated crew mode, and the map fills in live
 4. Mark an A lead and watch the alert appear for everyone
 5. End the session, upload it to the team, and see it on the web map
