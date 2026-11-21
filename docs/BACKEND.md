@@ -63,7 +63,7 @@ apps/
     scripts/       data imports (london/) and smoke tests (smoke-*.ts)
     drizzle/       migrations (generated + custom SQL)
   mobile/          Jasmine
-  web/             later
+  web/             website (Vite + React), see WEB.md
 packages/
   shared/          Zod schemas and types for REST and socket events
 docker-compose.yml
@@ -269,8 +269,9 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
   - Also serves the London basemap (style, tiles, `london.pmtiles`), built into the image
 - Background jobs (session processing, auto-end, cleanup) run inside the same container
 - Coolify's proxy handles HTTPS (Let's Encrypt) and WebSockets once the domain points at the VM, so no separate Caddy setup
-- **Domain:** `knockd.rodeo`. DNS A records `api.knockd.rodeo` (the API) and `coolify.knockd.rodeo` (the dashboard) point at the VM. Vultr region: Toronto
-- The mobile app isn't hosted here: it's built with Expo. Where the web app is hosted is decided when it's built
+- **Domain:** `knockd.rodeo`. DNS A records `knockd.rodeo` (the website), `api.knockd.rodeo` (the API) and `coolify.knockd.rodeo` (the dashboard) point at the VM. Vultr region: Toronto
+- **`web`**: a second Coolify Application built from [apps/web/Dockerfile](../apps/web/Dockerfile) (nginx serving the built site) at `knockd.rodeo`. Setup steps in [WEB.md](WEB.md)
+- The mobile app isn't hosted here: it's built with Expo
 - **Tiger Cloud** is managed separately. The connection string goes in an environment variable
 
 ### Environment variables
