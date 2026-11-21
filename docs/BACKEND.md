@@ -12,12 +12,11 @@ Owner: Tristan
 Mobile app  <--Socket.io + REST-->  Vultr VM (Coolify)               -->  Tiger Cloud
 Web app     <--REST------------->   ├─ api: Express + Socket.io           (Postgres + TimescaleDB + PostGIS)
                                     │     └─ serves london.pmtiles (basemap)
-                                    └─ osrm: map matching (London extract)
 ```
 
 - **One server** handles REST (teams, maps, plans, uploads, history) and Socket.io (everything live in a session)
 - **Tiger Cloud** is the only database. It's managed, so it doesn't live on the VM
-- **OSRM** runs next to the API on the same VM and is only called by the server
+- **Map matching** runs in PostGIS when a session ends (see [End-of-session processing](#end-of-session-processing)), so there is no separate routing service
 - **Basemap tiles** are one static file served by the API (see [Maps and tiles](#maps-and-tiles))
 
 ### Principles
@@ -42,8 +41,6 @@ Web app     <--REST------------->   ├─ api: Express + Socket.io           (P
 | Migrations      | Drizzle Kit                                               | Generated migrations for normal tables; custom SQL migrations (`drizzle-kit generate --custom`) for hypertables, policies, continuous aggregates and PostGIS |
 | Auth            | Auth0 + `express-oauth2-jwt-bearer`                       | Verifies account tokens on REST and on socket connect                                                                                                        |
 | Guest auth      | `jose`                                                    | Server-signed guest token issued when someone joins with a code                                                                                              |
-| Background jobs | pg-boss                                                   | Job queue stored in Postgres. Runs end-of-session processing and scheduled cleanup. No Redis                                                                 |
-| Map matching    | OSRM (`ghcr.io/project-osrm/osrm-backend`), foot profile  | London extract only, to keep RAM low                                                                                                                         |
 | Map tiles       | Protomaps basemap as a PMTiles file                       | London extract, served as a static file with HTTP range requests. Clients render with MapLibre                                                               |
 | Data scripts    | TypeScript (`tsx`) + CLI tools (osmium, ogr2ogr, pmtiles) | No Python. Everything else is TypeScript already                                                                                                             |
 | Logging         | pino                                                      |                                                                                                                                                              |
@@ -61,11 +58,10 @@ apps/
       http/        REST routes and middleware
       realtime/    Socket.io handlers and in-memory session state
       db/          Drizzle schema, client, queries
-      jobs/        pg-boss jobs (session processing, cleanup)
-      geo/         map matching, worked/passed classification, block stats
+      jobs/        session processing (map matching, coverage, block stats) and scheduled jobs
       sim/         simulated crew
+    scripts/       data imports (london/) and smoke tests (smoke-*.ts)
     drizzle/       migrations (generated + custom SQL)
-    scripts/       one-time imports (roads, houses, census) and demo seeding
   mobile/          Jasmine
   web/             later
 packages/
@@ -160,30 +156,37 @@ Imported once per region by scripts.
 
 ### Ending a session
 
-- Ends when the creator ends it, or automatically at the end of the day (e.g. midnight local time, or 12 hours after the start)
-- On end: status → `ended`, the room is told, and a `process-session` job is queued
+- Ends when the creator ends it, or automatically 12 hours after it started
+- On end: status → `ended`, the room gets `session:ended`, and the session is queued for processing
 
 ---
 
 ## End-of-session processing
 
-The `process-session` pg-boss job:
+[src/jobs/process-session.ts](../apps/server/src/jobs/process-session.ts), one session at a time, all in one transaction (re-running replaces earlier results). Typically under a second.
 
-1. **Map match:** send each member's pings to OSRM `/match/v1/foot`, split into chunks wherever there are gaps in the GPS data. Save the matched paths to `session_paths`
-2. **Drop driving:** ignore stretches faster than about 8 km/h
-3. **Classify streets:** for each member and street, add up the time spent. Minutes per 100m above a threshold = `worked`, otherwise `passed`. The thresholds live in config so they can be tuned after real test walks
-4. **Block stats:** houses worked = houses whose nearest street was `worked` in this session. Count leads A/B/C per block
-5. **Mark processed:** status → `processed`. The session is ready to upload
+1. **Snap (map matching in PostGIS):** each ping with accuracy ≤ 30 m is matched to the nearest street segment within ~30 m (`ORDER BY geom <-> location`). Streets are split at every intersection, so this is accurate for people walking residential streets, with no extra service
+2. **Drop driving:** time between two pings faster than 2.5 m/s (9 km/h) is ignored
+3. **Time per street:** the time to each member's next ping, capped at 60 s (so a phone asleep at lunch doesn't count as hours), is added to the street of the ping
+4. **Classify:** a member's time on a street ≥ max(45 s, 1.2 s per metre of street) (≈ 2 min per 100 m) → `worked`, otherwise `passed` → `session_street_coverage`, with the street's house count
+5. **Paths:** each member's pings snapped onto the streets → `session_paths`, with walking distance (driving excluded)
+6. **Block stats:** houses on worked streets, A/B/C leads and last worked time per block → `session_block_stats`
+7. **Done:** status → `processed`, `session:processed` broadcast (the upload prompt can show). Writes after this return `410`
+
+Thresholds are in `PROCESSING` at the top of the file; tune them after a real test walk. OSRM map matching can replace step 1 later if real-world matching turns out noisy.
 
 ### Uploading
 
 - Upload = insert into `team_sessions`. The primary key makes duplicate uploads a no-op
-- Only team members can upload to their team
+- Only team members who were in the session while logged in can upload it, and only after it ends
 
-### Cleanup (scheduled pg-boss job)
+### Background jobs
 
-- Daily: delete sessions older than 7 days that aren't in `team_sessions`, along with their processed results, leads, pins and chat
-- Raw pings are handled separately by the retention policy
+[src/jobs/scheduler.ts](../apps/server/src/jobs/scheduler.ts), inside the API server (single instance, so no job queue). Every 10 minutes, and on startup:
+
+- **Auto-end** sessions still live after 12 hours
+- **Catch up:** queue any session that's `ended` but not `processed` (e.g. the server restarted mid-way)
+- **Grace period:** delete sessions older than 7 days that nobody uploaded (cascades to members, leads, pins, chat, results). Raw pings are separately dropped after 7 days by the hypertable retention policy
 
 ---
 
@@ -225,7 +228,6 @@ pnpm --filter @knockd/server data:census     # StatCan DAs + median household in
 | Blocks  | Generated from roads                                                                                              | `ST_Polygonize` on the road network (1,500–400,000 m²). Houses left outside (cul-de-sac subdivisions) are grouped by street into extra blocks. Blocks with no houses dropped |
 | Houses  | OpenStreetMap buildings (good coverage in London thanks to municipal imports)                                     | Residential buildings of 40–600 m², assigned to a block and their nearest street within ~70 m → `houses`                                                                     |
 | Census  | StatCan 2021 DA boundary shapefile + Census Profile (DA, Ontario CSV). Downloaded by hand: StatCan blocks scripts | DAs around London, characteristic 243 (median total income of household) → `census_areas`                                                                                    |
-| OSRM    | London `.osm` extract                                                                                             | `osrm-extract` (foot profile) → `osrm-partition` → `osrm-customize`                                                                                                          |
 | Basemap | Protomaps daily build                                                                                             | `pmtiles extract` with a London bounding box → `london.pmtiles`                                                                                                              |
 
 **London as imported:** 14,082 street segments, 4,037 blocks, 112,188 houses (97% in a block, median 18 per block), 626 census areas (613 with income, median $84,000).
@@ -262,7 +264,7 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
 - **`api`**: a Coolify **Application** built from [apps/server/Dockerfile](../apps/server/Dockerfile) (build context: repo root). Coolify redeploys it on every push to `main`
   - On start it runs `pnpm db:migrate` (new Drizzle migrations + continuous aggregates), then the server
   - Also serves `london.pmtiles` once it's added
-- **`osrm`** (later, with session processing): a second Coolify resource running `osrm-routed` on the London data, reachable only from the API
+- Background jobs (session processing, auto-end, cleanup) run inside the same container
 - Coolify's proxy handles HTTPS (Let's Encrypt) and WebSockets once the domain points at the VM, so no separate Caddy setup
 - **Domain:** `knockd.rodeo`. DNS A records `api.knockd.rodeo` (the API) and `coolify.knockd.rodeo` (the dashboard) point at the VM. Vultr region: Toronto
 - The mobile app isn't hosted here: it's built with Expo. Where the web app is hosted is decided when it's built
@@ -275,7 +277,6 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
 | `DATABASE_URL`                   | Tiger Cloud connection string               |
 | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | Auth0 token checks                          |
 | `GUEST_TOKEN_SECRET`             | Signing guest tokens                        |
-| `OSRM_URL`                       | Internal URL of the OSRM service            |
 | `GEMINI_API_KEY`                 | Only if the "ask your data" add-on is built |
 
 ---
@@ -283,7 +284,6 @@ Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census 
 ## To check early
 
 - PostGIS is available on the Tiger Cloud free tier
-- How much RAM OSRM needs for the London extract, so you can pick the VM size
 - That `ST_Polygonize` on London's roads gives sensible blocks (cul-de-sacs and parks will need cleanup)
 - Worked/passed thresholds, using a real test walk
 - MapLibre React Native can read PMTiles for offline downloads. If not, serve the same file as standard `/{z}/{x}/{y}` tiles with `go-pmtiles serve` as a third container
