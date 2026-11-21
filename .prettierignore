@@ -4,3 +4,6 @@ node_modules/
 dist/
 build/
 .expo/
+# Generated (and its template has placeholders that are not valid JS)
+docs/suggest-viewer.html
+apps/server/scripts/suggest-viewer/template.html

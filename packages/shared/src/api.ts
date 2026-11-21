@@ -223,14 +223,12 @@ export type TrailsRes = z.infer<typeof TrailsRes>;
 export const GetSessionPlanRes = z.object({ plan: PlanContent, version: z.number().int().nonnegative() });
 export type GetSessionPlanRes = z.infer<typeof GetSessionPlanRes>;
 
-/** Default when a crew has no history (README: ~25 houses/hour per pair). */
-export const DEFAULT_HOUSES_PER_HOUR_PER_GROUP = 25;
-
-export const KnockRateRes = z.object({
-  housesPerHourPerGroup: z.number().positive(),
+/** Time per door for Suggest (DEFAULT_SECONDS_PER_DOOR until it's learned from team history). */
+export const DoorTimeRes = z.object({
+  secondsPerDoor: z.number().positive(),
   source: z.enum(["history", "default"]),
 });
-export type KnockRateRes = z.infer<typeof KnockRateRes>;
+export type DoorTimeRes = z.infer<typeof DoorTimeRes>;
 
 // ============================== Teams ==============================
 

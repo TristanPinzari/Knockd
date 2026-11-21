@@ -136,8 +136,8 @@ sessionsRouter.get("/:id/plan", async (_req, res) => {
   res.json(await planning.getPlan(sessionCtx(res).sessionId));
 });
 
-sessionsRouter.get("/:id/knock-rate", async (_req, res) => {
-  res.json(await planning.getKnockRate(sessionCtx(res).sessionId));
+sessionsRouter.get("/:id/door-time", async (_req, res) => {
+  res.json(await planning.getDoorTime(sessionCtx(res).sessionId));
 });
 
 // ============================== Simulated crew ==============================

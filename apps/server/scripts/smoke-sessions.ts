@@ -270,8 +270,8 @@ check(
   "the snapshot includes the live plan",
   (await call("GET", S, undefined, a.token)).json?.plan?.claims?.length === 2,
 );
-const kr = await call("GET", `${S}/knock-rate`, undefined, a.token);
-check("knock rate → default 25/h", kr.json?.housesPerHourPerGroup === 25 && kr.json?.source === "default");
+const dt = await call("GET", `${S}/door-time`, undefined, a.token);
+check("door time → default 60 s", dt.json?.secondsPerDoor === 60 && dt.json?.source === "default");
 
 // ---------- stats ----------
 const stats = await call("GET", `${S}/stats`, undefined, a.token);

@@ -20,7 +20,8 @@
     "data:download": "tsx scripts/london/download.ts",
     "data:import": "tsx scripts/london/import.ts",
     "data:census": "tsx scripts/london/census.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "suggest:viewer": "tsx scripts/suggest-viewer/build.ts"
   },
   "dependencies": {
     "@knockd/shared": "workspace:*",
@@ -47,6 +48,7 @@
     "@types/shapefile": "^0.6.4",
     "@types/yauzl": "^3.4.0",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "0.28.2",
     "pino-pretty": "^13.2.0",
     "shapefile": "^0.6.6",
     "socket.io-client": "^4",
