@@ -268,8 +268,7 @@ This is peer-to-peer. Teammates see each other, not a manager seeing subordinate
 ## Name & Domain
 
 - Working name: **Knockd** — checked on App Store and Google Play, no conflicting app found
-- For the GoDaddy Registry domain prize, the domain has to be on a GoDaddy Registry extension (e.g. .co, .us, .biz), not .com. Something like knockd.co. Check the eligible list at the event
-- Register it early so it's ready before the demo
+- **Domain: `knockd.rodeo`**, registered for the GoDaddy Registry domain prize. The API is at `api.knockd.rodeo`
 
 ## Market
 
