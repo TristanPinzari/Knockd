@@ -70,14 +70,30 @@ export const Member = z.object({
 });
 export type Member = z.infer<typeof Member>;
 
+export const LEAD_NOTE_MAX = 140;
+/** Optional short note on a lead, e.g. "old house, peeling paint, loved our work". */
+export const LeadNote = z.string().trim().max(LEAD_NOTE_MAX);
+
 export const Lead = z.object({
   clientId: Uuid,
   memberId: Uuid,
   houseId: RefId,
   grade: Grade,
+  note: LeadNote.nullable(),
   createdAt: Timestamp,
+  updatedAt: Timestamp,
 });
 export type Lead = z.infer<typeof Lead>;
+
+/** A lead from past sessions, shown as a reference. */
+export const PastLead = z.object({
+  houseId: RefId,
+  grade: Grade,
+  note: LeadNote.nullable(),
+  /** When the lead was last updated. */
+  at: Timestamp,
+});
+export type PastLead = z.infer<typeof PastLead>;
 
 export const Pin = LatLng.extend({ clientId: Uuid, memberId: Uuid, createdAt: Timestamp });
 export type Pin = z.infer<typeof Pin>;

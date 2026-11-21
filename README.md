@@ -85,6 +85,8 @@ Walking past a street isn't the same as knocking it. Each street is classified u
 
 - A block is an area enclosed by roads: the "big rectangle" of houses crews actually work one at a time
 - Blocks are generated automatically from map data, and every house in a block is known from open building outline data
+- Cul-de-sacs and crescents that don't form a closed loop become their own block
+- **Houses only, no apartments.** Door-to-door sales (internet, roofing, painting) doesn't knock apartment buildings, and you usually can't get past the front desk anyway. Apartment buildings are filtered out of the map data
 - Blocks are the unit for selecting, assigning and measuring coverage. Each block knows its house count. Its coverage is the % of its streets that were worked, and it fills in with the worker's colour as that goes up
 
 ### Planning mode
@@ -113,9 +115,11 @@ Crews selling things like painting or roofing rarely make a sale at the door. Th
 
 How it works in the app:
 
-- Every house is assumed no lead. No need to keep the app open to log each door. There are **no other door statuses** (no "visited", "no answer", "call back" or "not soliciting") and no notes
+- Every house is assumed no lead. No need to keep the app open to log each door. There are **no other door statuses** (no "visited", "no answer", "call back" or "not soliciting")
 - **Long-press a house → tap A, B or C** (not double-tap, which zooms the map), with a quick undo
-- **The app records only the grade**, not names or phone numbers. Contact details go in whatever form or CRM the company already uses. Knockd is for coordination and geography, not a CRM
+- **Optional short note** on a lead, up to 140 characters, e.g. "old house, peeling paint, loved our work" or "don't knock, very bad". Leads are assumed good unless the note says otherwise
+- A lead's grade and note can be edited later. Each lead keeps when it was created and last updated
+- **No contact details:** phone numbers and emails go in whatever form or CRM the company already uses. Knockd is for coordination and geography, not a CRM
 - **Live lead alert:** everyone in the session gets a notification ("Jas just got an A lead on Oak St!") and the house lights up on their map
 - **Leaderboard:** a small in-session leaderboard of leads per person, by grade
 
@@ -172,7 +176,7 @@ The app runs for a whole shift and crews can't charge mid-job, so battery use is
 4. Lobby (join code, member colours)
 5. Plan (assign blocks, Suggest, Apply)
 6. Live map (the main screen)
-7. House sheet (A/B/C grade with undo, previous lead info)
+7. House sheet (A/B/C grade with undo, short note, previous lead info)
 8. Team progress (leaderboard, coverage so far)
 9. End-of-day stats (with Add to team)
 10. Settings (offline map, battery mode)
@@ -248,7 +252,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - **Loaded team data** (e.g. previous leads) is visible to everyone in the session, including guests, since anyone knocking benefits from references
 - **Everyone's paths are uploaded**, including guests without accounts. The join screen says so: "your path may be saved to the crew's team map"
 - **Grace period:** session data stays on the server for 7 days so someone can upload it later if everyone skipped the prompt or a phone died. Sessions nobody uploads are deleted after that, and raw GPS points are always deleted after 7 days
-- After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and lead grades are saved. No names or phone numbers are ever stored
+- After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks, lead grades and lead notes are saved. No phone numbers or contact details are stored
 - **Positioning:** the history is the crew's shared memory, not a way for a manager to track people. Paths are saved as streets walked per session, not a minute-by-minute record of where someone was
 
 ## Why It's Different

@@ -5,3 +5,6 @@ dist/
 !.env.example
 *.log
 .DS_Store
+
+# Downloaded map data (large, re-downloadable)
+apps/server/data/

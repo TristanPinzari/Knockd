@@ -29,6 +29,20 @@
       "when": 1795236975476,
       "tag": "0003_session_planned_area",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795237762875,
+      "tag": "0004_pings_compression_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795240767449,
+      "tag": "0005_lead_notes",
+      "breakpoints": true
     }
   ]
 }

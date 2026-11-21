@@ -20,9 +20,11 @@ import {
 import {
   Layer,
   Lead,
+  LeadNote,
   LibraryPlan,
   MapView,
   Member,
+  PastLead,
   Message,
   Pin,
   PlanContent,
@@ -119,7 +121,7 @@ export const SessionAreaRes = z.object({
 export type SessionAreaRes = z.infer<typeof SessionAreaRes>;
 
 export const SessionLayersRes = z.object({
-  leads: z.array(z.object({ houseId: RefId, grade: Grade, at: Timestamp })).optional(),
+  leads: z.array(PastLead).optional(),
   /** Paths with properties { durationS, lastWorkedAt } */
   coverage: FeatureCollectionGeo.optional(),
   /** rate = null means not enough data yet */
@@ -154,10 +156,18 @@ export type PostPingsBody = z.infer<typeof PostPingsBody>;
 export const PostPingsRes = z.object({ accepted: z.number().int() });
 export type PostPingsRes = z.infer<typeof PostPingsRes>;
 
-export const PostLeadBody = z.object({ clientId: Uuid, houseId: RefId, grade: Grade });
+export const PostLeadBody = z.object({ clientId: Uuid, houseId: RefId, grade: Grade, note: LeadNote.optional() });
 export type PostLeadBody = z.infer<typeof PostLeadBody>;
 export const PostLeadRes = z.object({ lead: Lead });
 export type PostLeadRes = z.infer<typeof PostLeadRes>;
+
+/** Edit a lead's grade or note. `note: null` clears it. */
+export const PatchLeadBody = z
+  .object({ grade: Grade.optional(), note: LeadNote.nullable().optional() })
+  .refine((b) => b.grade !== undefined || b.note !== undefined, "Nothing to update");
+export type PatchLeadBody = z.infer<typeof PatchLeadBody>;
+export const PatchLeadRes = PostLeadRes;
+export type PatchLeadRes = PostLeadRes;
 
 export const PostPinBody = LatLng.extend({ clientId: Uuid });
 export type PostPinBody = z.infer<typeof PostPinBody>;
@@ -303,7 +313,7 @@ export type MapBlocksRes = z.infer<typeof MapBlocksRes>;
 export const MapLeadsQuery = MapQuery.extend({ grades: csv(Grade).optional() });
 export type MapLeadsQuery = z.infer<typeof MapLeadsQuery>;
 export const MapLeadsRes = z.object({
-  leads: z.array(LatLng.extend({ houseId: RefId, grade: Grade, at: Timestamp })),
+  leads: z.array(PastLead.extend(LatLng.shape)),
 });
 export type MapLeadsRes = z.infer<typeof MapLeadsRes>;
 

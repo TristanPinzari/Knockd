@@ -20,6 +20,7 @@ export interface ServerToClientEvents {
   "member:status": (p: { memberId: string; online: boolean }) => void;
   positions: (p: { positions: (Position & { memberId: string })[] }) => void;
   "lead:new": (p: { lead: Lead; memberName: string }) => void;
+  "lead:updated": (p: { lead: Lead }) => void;
   "lead:removed": (p: { clientId: string }) => void;
   "pin:new": (p: { pin: Pin }) => void;
   "pin:removed": (p: { clientId: string }) => void;
