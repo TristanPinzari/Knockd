@@ -5,7 +5,7 @@
  * Edits use applyPlanEdit from @knockd/shared, the same code the apps run for instant updates.
  * The author of new items is always the member who sent the edit (so "clearMine" can be trusted).
  */
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   applyPlanEdit,
   DEFAULT_HOUSES_PER_HOUR_PER_GROUP,
@@ -24,10 +24,10 @@ import { emitToSession } from "../realtime/io";
 
 export async function getPlan(sessionId: string): Promise<GetSessionPlanRes> {
   const [row] = await db
-    .select({ plan: sessionPlans.plan })
+    .select({ plan: sessionPlans.plan, version: sessionPlans.version })
     .from(sessionPlans)
     .where(eq(sessionPlans.sessionId, sessionId));
-  return { plan: row?.plan ?? EMPTY_PLAN };
+  return { plan: row?.plan ?? EMPTY_PLAN, version: row?.version ?? 0 };
 }
 
 /** One edit at a time per session, so two people editing at once can't overwrite each other's change. */
@@ -56,11 +56,16 @@ export function editPlan(sessionId: string, authorId: string, op: PlanEditOp): P
       if (err instanceof PlanEditError) throw new HttpError(400, "invalid_request", err.message);
       throw err;
     }
-    await db
+    // Save and bump the version in one statement.
+    const [saved] = await db
       .insert(sessionPlans)
-      .values({ sessionId, plan: updated })
-      .onConflictDoUpdate({ target: sessionPlans.sessionId, set: { plan: updated, updatedAt: new Date() } });
-    emitToSession(sessionId, "plan:updated", { plan: updated, editedBy: authorId });
+      .values({ sessionId, plan: updated, version: 1 })
+      .onConflictDoUpdate({
+        target: sessionPlans.sessionId,
+        set: { plan: updated, version: sql`${sessionPlans.version} + 1`, updatedAt: new Date() },
+      })
+      .returning({ version: sessionPlans.version });
+    emitToSession(sessionId, "plan:updated", { plan: updated, version: saved!.version, editedBy: authorId });
     return updated;
   });
 }

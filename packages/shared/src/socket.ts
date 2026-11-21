@@ -26,7 +26,11 @@ export interface ServerToClientEvents {
   "pin:removed": (p: { clientId: string }) => void;
   "message:new": (p: { message: Message }) => void;
   /** The session plan changed (anyone's edit). Replace your copy. */
-  "plan:updated": (p: { plan: PlanContent; editedBy: string }) => void;
+  /**
+   * version goes up by 1 per edit. Ignore an update older than the one you have; if it skips
+   * ahead (you missed one), refetch GET /v1/sessions/:id/plan.
+   */
+  "plan:updated": (p: { plan: PlanContent; version: number; editedBy: string }) => void;
   "session:ended": () => void;
   /** The upload prompt can show now. */
   "session:processed": () => void;

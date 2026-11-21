@@ -263,7 +263,7 @@ Drawings and notes are either **for a member** (`memberId`, drawn in their colou
 ### `GET /v1/sessions/:id/plan` 🎟️
 
 ```ts
-→ { plan: PlanContent }
+→ { plan: PlanContent, version: number }   // version: +1 per edit, 0 = never edited
 // PlanContent = {
 //   claims:   { blockId, memberId, authorId }[],
 //   drawings: { id, kind: "route" | "freehand", points: { lat, lng }[], memberId | null, colour | null, authorId }[],
@@ -271,7 +271,9 @@ Drawings and notes are either **for a member** (`memberId`, drawn in their colou
 // }
 ```
 
-The snapshot (`GET /v1/sessions/:id`) includes the same `plan`.
+The snapshot (`GET /v1/sessions/:id`) includes the same `plan` and its version as `planVersion`.
+
+**Staying in sync:** keep the latest `version` you've seen. On `plan:updated`, ignore it if its version is older than yours; if it's more than one ahead (you missed an update, e.g. a signal drop), refetch `GET /plan`. Also refetch on reconnect. When debugging, two phones with the same version have identical plans.
 
 ### `GET /v1/sessions/:id/knock-rate` 🎟️
 
@@ -504,7 +506,7 @@ Connect with `auth: { token }` (session token). The server checks it and joins t
 | `lead:removed`            | `{ clientId }`                                                                                                                                       |
 | `pin:new` / `pin:removed` | `{ pin }` / `{ clientId }`                                                                                                                           |
 | `message:new`             | `{ message }`                                                                                                                                        |
-| `plan:updated`            | `{ plan, editedBy }`: the whole plan after anyone's edit. Replace your copy                                                                          |
+| `plan:updated`            | `{ plan, version, editedBy }`: the whole plan after anyone's edit. Replace your copy (see "Staying in sync" under Planning)                          |
 | `session:ended`           | `{}`                                                                                                                                                 |
 | `session:processed`       | `{}` (the upload prompt can show now)                                                                                                                |
 
@@ -524,7 +526,7 @@ Connect with `auth: { token }` (session token). The server checks it and joins t
 | `clearMine`  | `{}`                                                                 | Remove all your own claims, drawings and notes. Teammates' items stay |
 
 - Send with an acknowledgement callback: `socket.emit("plan:edit", op, (res) => ...)`. `res` is `{ ok: true }` or `{ ok: false, error }` (e.g. "That person isn't in this session", "Set exactly one of memberId or colour", or the session has ended)
-- On success everyone (including the sender) gets `plan:updated`
+- On success everyone (including the sender) gets `plan:updated` with the new `version`. Planning edits need a connection (they aren't queued offline): if the ack fails, tell the user it didn't save
 - **Instant updates:** run `applyPlanEdit(plan, op, myMemberId)` from `@knockd/shared` locally before the server replies. It's the exact code the server runs. Replace with the server's `plan:updated` when it arrives
 - **Undo/redo** (your own actions only) is built on the phone from these ops: undo `claim` → `unclaim`, undo `draw` → `erase`, undo `note` → `removeNote`, and the reverse for redo. Keep the stroke/note to redraw it
 - Claims and drawings/notes `for` a member must name someone in the session
