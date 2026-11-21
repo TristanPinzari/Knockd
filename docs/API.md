@@ -248,6 +248,8 @@ Everyone's GPS trail so far, for drawing trails when the app opens or reconnects
 
 ## Planning (in session)
 
+> ⚠️ **Being redesigned, don't build against this yet.** Groups, the draft/Apply step and loading library plans are going away. The new plan is one live plan of claims (block + member), routes, freehand lines and notes, each for a member or in a utility colour, plus a Suggest feature that runs on the phone. See the README's "Planning mode" and "Marking where to go" sections for the agreed design; this section will be rewritten when it's built.
+
 ### `GET /v1/sessions/:id/plan` 🎟️
 
 ```ts
@@ -278,6 +280,8 @@ The crew's learned knock rate for on-device suggestions. Falls back to the defau
 ---
 
 ## Teams
+
+> ⚠️ **Roles are changing** from owner / admin / member to **owner / editor / viewer** (see the README's "Teams and maps"). The endpoints stay the same; the role names and permissions change when it's built.
 
 ### `POST /v1/teams` 👤
 
@@ -391,6 +395,8 @@ Newest first. The client calculates visibility (duration × age) using the team'
 
 ## Plans (library)
 
+> ⚠️ **Being redesigned, don't build against this yet.** The plan library is being removed. The web's planning tools become team **highlights** (strokes/areas in 6 preset colours) and team **notes**, also served as session layers. See the README's "Planning mode" and "Marking where to go" sections for the agreed design; this section will be rewritten when it's built.
+
 ### `GET /v1/teams/:id/plans?used=false` 👤 · `POST /v1/teams/:id/plans` 👤
 
 ```ts
@@ -481,6 +487,8 @@ Connect with `auth: { token }` (session token). The server checks it and joins t
 | `session:processed`       | `{}` (the upload prompt can show now)                                                                                                                |
 
 ### Client → server
+
+> ⚠️ The `plan:edit` operations and the `plan:draft` / `plan:applied` events are being redesigned along with planning mode (see above).
 
 | Event       | Payload                                                                                                                                                                         |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
