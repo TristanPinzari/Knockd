@@ -13,6 +13,7 @@
     "db:migrate": "drizzle-kit migrate && tsx src/db/continuous-aggregates.ts",
     "db:studio": "drizzle-kit studio",
     "smoke": "tsx scripts/smoke-sessions.ts",
+    "smoke:accounts": "tsx scripts/smoke-accounts.ts",
     "data:download": "tsx scripts/london/download.ts",
     "data:import": "tsx scripts/london/import.ts",
     "data:census": "tsx scripts/london/census.ts"
@@ -23,6 +24,7 @@
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.4",
     "express": "^5",
+    "express-oauth2-jwt-bearer": "^1.11.0",
     "jose": "^6.2.18",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",

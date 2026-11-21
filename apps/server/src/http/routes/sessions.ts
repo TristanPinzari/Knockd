@@ -12,6 +12,7 @@ import {
   PostPingsBody,
   Uuid,
 } from "@knockd/shared";
+import { maybeAccountUser, optionalAccount } from "../../auth/account";
 import * as planning from "../../sessions/planning";
 import * as sessions from "../../sessions/service";
 import { getStats } from "../../sessions/stats";
@@ -23,14 +24,15 @@ export const sessionsRouter = Router();
 
 // ============================== Open (🔓) ==============================
 
-sessionsRouter.post("/", async (req, res) => {
+// 👤 optional: send an Auth0 token to link the session to your account (needed to upload it later).
+sessionsRouter.post("/", optionalAccount, async (req, res) => {
   const body = parse(CreateSessionBody, req.body);
-  res.status(201).json(await sessions.createSession(body));
+  res.status(201).json(await sessions.createSession(body, maybeAccountUser(res)?.id));
 });
 
-sessionsRouter.post("/join", async (req, res) => {
+sessionsRouter.post("/join", optionalAccount, async (req, res) => {
   const body = parse(JoinSessionBody, req.body);
-  res.json(await sessions.joinSession(body));
+  res.json(await sessions.joinSession(body, maybeAccountUser(res)?.id));
 });
 
 // Everything below needs a session token for :id (🎟️).

@@ -8,6 +8,7 @@ import { db } from "./db/client";
 import { env } from "./env";
 import { corsOrigin } from "./http/cors";
 import { errorHandler, unknownRoute } from "./http/errors";
+import { accountRouter } from "./http/routes/account";
 import { sessionsRouter } from "./http/routes/sessions";
 import { logger } from "./logger";
 
@@ -37,6 +38,7 @@ export function createApp() {
   app.use("/tiles", express.static(path.resolve(env.TILES_DIR), { fallthrough: true, maxAge: "1d" }));
 
   app.use("/v1/sessions", sessionsRouter);
+  app.use("/v1", accountRouter);
 
   app.use(unknownRoute);
   app.use(errorHandler);
