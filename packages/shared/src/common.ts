@@ -89,6 +89,7 @@ export const ErrorCode = z.enum([
   "not_found",
   "session_not_found",
   "session_ended",
+  "session_full",
   "conflict",
   "internal",
 ]);

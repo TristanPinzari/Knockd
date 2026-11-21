@@ -28,6 +28,7 @@ import {
   PlanContent,
   PlanGroup,
   Session,
+  SessionAreaInput,
   SessionStatus,
   Stats,
   Team,
@@ -73,6 +74,7 @@ export type SessionAccessRes = z.infer<typeof SessionAccessRes>;
 export const CreateSessionBody = z.object({
   displayName: DisplayName,
   location: LatLng,
+  area: SessionAreaInput,
   /** Account only. */
   loadMap: z.object({ mapId: Uuid, layers: z.array(Layer).min(1) }).optional(),
 });

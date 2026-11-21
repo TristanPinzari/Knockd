@@ -11,12 +11,14 @@ Owner: Tristan
 ```
 Mobile app  <--Socket.io + REST-->  Vultr VM (Coolify)               -->  Tiger Cloud
 Web app     <--REST------------->   ├─ api: Express + Socket.io           (Postgres + TimescaleDB + PostGIS)
+                                    │     └─ serves london.pmtiles (basemap)
                                     └─ osrm: map matching (London extract)
 ```
 
 - **One server** handles REST (teams, maps, plans, uploads, history) and Socket.io (everything live in a session)
 - **Tiger Cloud** is the only database. It's managed, so it doesn't live on the VM
 - **OSRM** runs next to the API on the same VM and is only called by the server
+- **Basemap tiles** are one static file served by the API (see [Maps and tiles](#maps-and-tiles))
 
 ### Principles
 
@@ -29,22 +31,24 @@ Web app     <--REST------------->   ├─ api: Express + Socket.io           (P
 
 ## Stack
 
-| Piece           | Choice                                                   | Notes                                                                                                                                                        |
-| --------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Language        | TypeScript, Node 22 LTS                                  |                                                                                                                                                              |
-| HTTP            | Express 5                                                |                                                                                                                                                              |
-| Realtime        | Socket.io 4                                              | One room per session code                                                                                                                                    |
-| Validation      | Zod                                                      | Schemas in `packages/shared`, used for both REST bodies and socket payloads                                                                                  |
-| Database        | Tiger Cloud (Postgres + TimescaleDB + PostGIS)           | **Check that PostGIS can be enabled on the free tier first**                                                                                                 |
-| ORM             | Drizzle ORM (postgres.js driver)                         | Typed queries for normal tables; Drizzle's `sql` template for PostGIS and Timescale queries                                                                  |
-| Migrations      | Drizzle Kit                                              | Generated migrations for normal tables; custom SQL migrations (`drizzle-kit generate --custom`) for hypertables, policies, continuous aggregates and PostGIS |
-| Auth            | Auth0 + `express-oauth2-jwt-bearer`                      | Verifies account tokens on REST and on socket connect                                                                                                        |
-| Guest auth      | `jose`                                                   | Server-signed guest token issued when someone joins with a code                                                                                              |
-| Background jobs | pg-boss                                                  | Job queue stored in Postgres. Runs end-of-session processing and scheduled cleanup. No Redis                                                                 |
-| Map matching    | OSRM (`ghcr.io/project-osrm/osrm-backend`), foot profile | London extract only, to keep RAM low                                                                                                                         |
-| Logging         | pino                                                     |                                                                                                                                                              |
-| Dev / tests     | `tsx watch`, Vitest                                      |                                                                                                                                                              |
-| Package manager | pnpm workspaces                                          |                                                                                                                                                              |
+| Piece           | Choice                                                    | Notes                                                                                                                                                        |
+| --------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Language        | TypeScript, Node 22 LTS                                   |                                                                                                                                                              |
+| HTTP            | Express 5                                                 |                                                                                                                                                              |
+| Realtime        | Socket.io 4                                               | One room per session code                                                                                                                                    |
+| Validation      | Zod                                                       | Schemas in `packages/shared`, used for both REST bodies and socket payloads                                                                                  |
+| Database        | Tiger Cloud (Postgres + TimescaleDB + PostGIS)            | **Check that PostGIS can be enabled on the free tier first**                                                                                                 |
+| ORM             | Drizzle ORM (postgres.js driver)                          | Typed queries for normal tables; Drizzle's `sql` template for PostGIS and Timescale queries                                                                  |
+| Migrations      | Drizzle Kit                                               | Generated migrations for normal tables; custom SQL migrations (`drizzle-kit generate --custom`) for hypertables, policies, continuous aggregates and PostGIS |
+| Auth            | Auth0 + `express-oauth2-jwt-bearer`                       | Verifies account tokens on REST and on socket connect                                                                                                        |
+| Guest auth      | `jose`                                                    | Server-signed guest token issued when someone joins with a code                                                                                              |
+| Background jobs | pg-boss                                                   | Job queue stored in Postgres. Runs end-of-session processing and scheduled cleanup. No Redis                                                                 |
+| Map matching    | OSRM (`ghcr.io/project-osrm/osrm-backend`), foot profile  | London extract only, to keep RAM low                                                                                                                         |
+| Map tiles       | Protomaps basemap as a PMTiles file                       | London extract, served as a static file with HTTP range requests. Clients render with MapLibre                                                               |
+| Data scripts    | TypeScript (`tsx`) + CLI tools (osmium, ogr2ogr, pmtiles) | No Python. Everything else is TypeScript already                                                                                                             |
+| Logging         | pino                                                      |                                                                                                                                                              |
+| Dev / tests     | `tsx watch`, Vitest                                       |                                                                                                                                                              |
+| Package manager | pnpm workspaces                                           |                                                                                                                                                              |
 
 ---
 
@@ -88,16 +92,16 @@ An overview. The source of truth is the Drizzle schema in [apps/server/src/db/sc
 
 ### Live sessions
 
-| Table             | Key columns                                                                                                                                  |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sessions`        | id, join_code, created_by (nullable for guests), status (`live` / `ended` / `processed`), started_at, ended_at, loaded_map_id, loaded_layers |
-| `session_cells`   | session_id, cell_id. The session area grows as cells are loaded (~1 km grid, see [API.md](API.md#map-cells))                                 |
-| `session_members` | id, session_id, user_id (nullable for guests), display_name, colour, joined_at                                                               |
-| `pings`           | **hypertable**: time, session_id, member_id, location (point), accuracy, client_id (unique)                                                  |
-| `leads`           | id (client UUID), session_id, member_id, house_id, grade (`A` / `B` / `C`), created_at, deleted_at (undo)                                    |
-| `pins`            | id, session_id, member_id, location, created_at                                                                                              |
-| `chat_messages`   | id (client UUID), session_id, member_id, body, created_at                                                                                    |
-| `session_plans`   | session_id, state (`draft` / `applied`), assignments, drawings (jsonb), updated_at                                                           |
+| Table             | Key columns                                                                                                                                                                                                    |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessions`        | id, join_code, created_by (nullable for guests), created_by_member_id (the session admin), status (`live` / `ended` / `processed`), started_at, ended_at, planned_area (polygon), loaded_map_id, loaded_layers |
+| `session_cells`   | session_id, cell_id. The session area grows as cells are loaded (~1 km grid, see [API.md](API.md#map-cells)), on top of the planned area                                                                       |
+| `session_members` | id, session_id, user_id (nullable for guests), display_name, colour, joined_at                                                                                                                                 |
+| `pings`           | **hypertable**: time, session_id, member_id, location (point), accuracy, client_id (unique)                                                                                                                    |
+| `leads`           | id (client UUID), session_id, member_id, house_id, grade (`A` / `B` / `C`), created_at, deleted_at (undo)                                                                                                      |
+| `pins`            | id, session_id, member_id, location, created_at                                                                                                                                                                |
+| `chat_messages`   | id (client UUID), session_id, member_id, body, created_at                                                                                                                                                      |
+| `session_plans`   | session_id, state (`draft` / `applied`), assignments, drawings (jsonb), updated_at                                                                                                                             |
 
 ### Processed session results
 
@@ -193,17 +197,30 @@ The `process-session` pg-boss job:
 
 ---
 
+## Maps and tiles
+
+**MapLibre + a self-hosted basemap, not Google Maps.** Google's map SDK can't download maps for offline use, and offline is in scope. MapLibre can, it's free, and the same library works on React Native and web. It needs an Expo dev build, which we need anyway for background location.
+
+- The basemap is a **Protomaps PMTiles** file cut to London (`pmtiles extract` from a Protomaps daily build with a London bounding box)
+- The API serves it as a static file: `GET /tiles/london.pmtiles` with HTTP range requests (Express static supports these). No API key
+- Phones download the session area ahead of time for offline use
+- Our own data (streets, blocks, houses, paths) comes from the API as GeoJSON and is drawn on top
+- Credit "© OpenStreetMap contributors" on both apps
+
+---
+
 ## Map data imports
 
-One-time scripts in `apps/server/scripts/`, run per region (London first):
+One-time TypeScript scripts in `apps/server/scripts/`, run per region (London first):
 
-| Data   | Source                                                      | Steps                                                                                                            |
-| ------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Roads  | OpenStreetMap Ontario extract (Geofabrik)                   | Clip to London with `osmium`, import with `osm2pgsql`, keep walkable/residential roads → `streets`               |
-| Blocks | Generated from roads                                        | `ST_Polygonize` on the road network, drop very large or very small polygons → `blocks`                           |
-| Houses | Microsoft Canadian building footprints                      | Clip to London, import with `ogr2ogr`, drop non-residential sizes, assign to block and nearest street → `houses` |
-| Census | Statistics Canada 2021 dissemination areas + census profile | Join boundaries with median household income → `census_areas`                                                    |
-| OSRM   | Same London `.osm.pbf`                                      | `osrm-extract` (foot profile) → `osrm-partition` → `osrm-customize`                                              |
+| Data    | Source                                                      | Steps                                                                                                            |
+| ------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Roads   | OpenStreetMap Ontario extract (Geofabrik)                   | Clip to London with `osmium`, import with `osm2pgsql`, keep walkable/residential roads → `streets`               |
+| Blocks  | Generated from roads                                        | `ST_Polygonize` on the road network, drop very large or very small polygons → `blocks`                           |
+| Houses  | Microsoft Canadian building footprints                      | Clip to London, import with `ogr2ogr`, drop non-residential sizes, assign to block and nearest street → `houses` |
+| Census  | Statistics Canada 2021 dissemination areas + census profile | Join boundaries with median household income → `census_areas`                                                    |
+| OSRM    | Same London `.osm.pbf`                                      | `osrm-extract` (foot profile) → `osrm-partition` → `osrm-customize`                                              |
+| Basemap | Protomaps daily build                                       | `pmtiles extract` with a London bounding box → `london.pmtiles`                                                  |
 
 ---
 
@@ -213,6 +230,7 @@ One-time scripts in `apps/server/scripts/`, run per region (London first):
 - **Guests:** joining with a code returns a guest token signed by the server, tied to one session and member, and valid until the session ends
 - **Sockets:** the handshake sends either an Auth0 token or a guest token. The server checks it before joining the room
 - **Team permissions:** checked per request against `team_members.role`
+- **Session admin:** the member who created the session (`sessions.created_by_member_id`). Only they can end the session and remove a member. Everyone else in a session has the same permissions
 
 ---
 
@@ -230,9 +248,10 @@ One-time scripts in `apps/server/scripts/`, run per region (London first):
 
 - **Vultr VM** with the Coolify Marketplace image
 - Coolify deploys `docker-compose.yml` from GitHub on every push to `main`. Two services:
-  - `api`: the Express + Socket.io server
+  - `api`: the Express + Socket.io server (also serves `london.pmtiles`)
   - `osrm`: `osrm-routed` serving the London data
-- Coolify handles HTTPS once the domain points at the VM
+- Coolify handles HTTPS once the domain points at the VM (its built-in proxy replaces a separate Caddy setup)
+- The mobile app isn't hosted here: it's built with Expo. Where the web app is hosted is decided when it's built
 - **Tiger Cloud** is managed separately. The connection string goes in an environment variable
 
 ### Environment variables
@@ -253,3 +272,4 @@ One-time scripts in `apps/server/scripts/`, run per region (London first):
 - How much RAM OSRM needs for the London extract, so you can pick the VM size
 - That `ST_Polygonize` on London's roads gives sensible blocks (cul-de-sacs and parks will need cleanup)
 - Worked/passed thresholds, using a real test walk
+- MapLibre React Native can read PMTiles for offline downloads. If not, serve the same file as standard `/{z}/{x}/{y}` tiles with `go-pmtiles serve` as a third container

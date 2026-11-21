@@ -1,4 +1,8 @@
-# Knockd — Door-to-Door Team Coordination App
+# Knockd
+
+A shared live map for door-to-door crews. Plan the area together, see where everyone is, and watch the map fill in as the team works.
+
+Not a CRM and not a manager dashboard. Teammates see each other, and the history is the crew's shared memory.
 
 This README covers the project scope. Technical docs:
 
@@ -11,13 +15,15 @@ This README covers the project scope. Technical docs:
 
 ## The Problem
 
-Small door-to-door sales crews (2–6 people) have no good way to coordinate in the field. The existing tools are either enterprise CRMs built for managers to monitor reps, or nothing. The day-to-day reality for a small crew looks like this:
+Small door-to-door crews (2–8 people) split up to cover more ground, then lose track of each other:
 
-- You split up to cover more ground, then have no idea where your teammate is or what streets they've already hit
+- You have no idea where your teammate is or what streets they've already hit
 - You end up knocking the same doors
-- You're constantly texting "you guys done yet?" and physically regrouping to figure out next steps
+- You're constantly texting "where are you?" and "you guys done yet?"
 - Planning who takes what means screenshotting Google Maps and drawing on the screenshot
 - There's no shared picture of what's been covered and what hasn't
+
+Existing tools (SPOTIO, SalesRabbit, Knockio) are built for managers watching reps, are CRM-first, and cost $15–50 per user per month.
 
 ## The Idea
 
@@ -28,14 +34,16 @@ It has two parts:
 - **Mobile app (Phase 1, priority):** runs the day in the field: planning, live map, coverage
 - **Web app (Phase 2):** post-session analysis and area planning across weeks and months
 
+**Launch city: London, Ontario.** We know the area, and the demo and seeded history are set there.
+
 **Core loop:**
 
 1. Crew pulls up to an area
-2. One person creates a session, shares a code
-3. Everyone joins — each person appears as a different colored dot on the map
-4. The crew plans together in **planning mode**: assign blocks to people or pairs, then apply the plan to the shared map
-5. As people move, they leave a colored trail behind them
-6. Streets get "painted" as they're worked — the map fills in visually as the crew works
+2. One person creates a session, picks the area (pin + radius, or draw it), and shares a code
+3. Everyone joins — each person appears as a different coloured dot on the map
+4. The crew plans together in **planning mode**: Knockd splits the area into blocks, the crew assigns blocks to people or pairs (or taps Suggest), then applies the plan to the shared map
+5. As people move, they leave a coloured trail behind them
+6. Streets get "painted" as they're worked, and blocks fill in as their streets are covered
 7. Leads are marked with a long-press on the house and graded A, B or C; everything else is assumed no lead
 8. Session ends when the crew is done for the day, with end-of-day stats
 9. Anyone in the session who's on a team can upload it to that team, where it shows up on the team's maps in the web app
@@ -47,7 +55,16 @@ The mobile app is focused on **today**: the live session, the plan, and the stat
 ### Sessions
 
 - Create a session and share a join code. Joining needs no account, just a name
+- Up to 8 people per session, one colour each
+- **The session creator is the session admin:** they can end the session, remove a member, and choose which team data to load. Everyone else is on equal footing (anyone can plan, apply a plan, mark leads)
 - Session ends when the creator ends it or at the end of the day
+
+### Session area
+
+Two things work together:
+
+- **Picked area:** when creating a session, the creator drops a pin and radius or draws the area. This is what gets split into blocks for planning
+- **Growing area:** map data around each crew member loads automatically as they walk, so walking outside the picked area still works
 
 ### Live map
 
@@ -68,7 +85,7 @@ Walking past a street isn't the same as knocking it. Each street is classified u
 
 - A block is an area enclosed by roads: the "big rectangle" of houses crews actually work one at a time
 - Blocks are generated automatically from map data, and every house in a block is known from open building outline data
-- Blocks are the unit for selecting, assigning and measuring coverage. Each block knows its house count, and its coverage is the % of its streets that were worked
+- Blocks are the unit for selecting, assigning and measuring coverage. Each block knows its house count. Its coverage is the % of its streets that were worked, and it fills in with the worker's colour as that goes up
 
 ### Planning mode
 
@@ -84,7 +101,7 @@ Replaces screenshot-and-draw. A shared planning screen inside the session:
   - Knock rate in houses per hour (learned from the crew's past sessions, with a default such as 25/hour per pair when there's no history)
   - Starting point (the car or current location)
 - The algorithm grows one group of connected blocks per person or pair outward from different starting blocks, balanced by house count against the time budget. Different starting blocks give the different options
-- An optional server API can add heavier work later, like real walking routes through each chunk
+- _Nice to have:_ real walking routes through each assigned chunk
 
 ### Leads
 
@@ -96,7 +113,7 @@ Crews selling things like painting or roofing rarely make a sale at the door. Th
 
 How it works in the app:
 
-- Every house is assumed no lead. No need to keep the app open to log each door
+- Every house is assumed no lead. No need to keep the app open to log each door. There are **no other door statuses** (no "visited", "no answer", "call back" or "not soliciting") and no notes
 - **Long-press a house → tap A, B or C** (not double-tap, which zooms the map), with a quick undo
 - **The app records only the grade**, not names or phone numbers. Contact details go in whatever form or CRM the company already uses. Knockd is for coordination and geography, not a CRM
 - **Live lead alert:** everyone in the session gets a notification ("Jas just got an A lead on Oak St!") and the house lights up on their map
@@ -129,6 +146,7 @@ Crews use previous leads nearby as references ("we just did a quote for the plac
 
 ### Offline
 
+- The map for the session area is downloaded ahead of time, so the map itself works without signal
 - GPS points, leads and planning changes are stored on the phone, each with a unique ID
 - Sent when the connection comes back. The server ignores duplicates
 - Worked/passed-by classification uses the GPS timestamps, so delayed uploads don't affect it
@@ -144,7 +162,20 @@ The app runs for a whole shift and crews can't charge mid-job, so battery use is
 
 ### Demo
 
-- **Simulated crew mode:** fake teammates walking scripted routes over a real neighbourhood, so the demo isn't a few dots sitting still indoors
+- **Simulated crew mode:** fake teammates walking scripted routes over a real neighbourhood, so the demo isn't a few dots sitting still indoors. Runs on the server, so they show up on any phone like normal teammates
+
+### Screens
+
+1. Welcome (log in, or join with a code)
+2. Home (teams, active session, start)
+3. Create session (area picker, optional team data to load)
+4. Lobby (join code, member colours)
+5. Plan (assign blocks, Suggest, Apply)
+6. Live map (the main screen)
+7. House sheet (A/B/C grade with undo, previous lead info)
+8. Team progress (leaderboard, coverage so far)
+9. End-of-day stats (with Add to team)
+10. Settings (offline map, battery mode)
 
 ## Web App (Phase 2)
 
@@ -163,7 +194,7 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
   - Maps can also filter by date, e.g. "Summer 2026"
 - A session in Byron shows up on both London and World automatically. Nobody has to add it to each map, and removing a session removes it everywhere
 - A company that wants one combined picture puts everyone in one team
-- **Roles:** owner/admin invites people and can remove sessions. Members can view, upload and make plans
+- **Team roles:** owner/admin invites people and can remove sessions. Members can view, upload and make plans
 
 ### How the map is drawn
 
@@ -189,8 +220,8 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - **Stats:** coverage, houses worked, distance, leads by grade, and **lead rate** = (A + B leads) ÷ houses worked, per session or per area
 - **"Hit X time ago"** for any street or block
 - **Where next?:** a simple ranking of how wealthy an area is (census median household income) × how long since it was last hit
-- **Plan library:** a boss sits down and makes several plans (blocks assigned per person or pair). The crew picks one in the field, it loads into mobile planning mode, and it's marked as used once a session runs it. Plans belong to the team and can be tied to a map
 - **Previous paths and session history:** replay any past session and see which streets each person walked
+- **Plan library** (after the team map works): a boss sits down and makes several plans (blocks assigned per person or pair). The crew picks one in the field, it loads into mobile planning mode, and it's marked as used once a session runs it. Plans belong to the team and can be tied to a map
 
 ### Nice to have
 
@@ -201,6 +232,14 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - **Gemini add-on:** "ask your data" questions like "which neighbourhoods sold best in October?", answered from the team's data
 - CSV export
 
+### Screens
+
+1. Landing page
+2. Team dashboard
+3. Team map (lead-rate colours, path fade, time slider)
+4. Session replay
+5. Plan library and members
+
 ## Accounts & Data
 
 - Joining a live session: no account needed, just a code and a name
@@ -208,8 +247,8 @@ Post-session analysis and area planning. Mobile is the priority, but the goal is
 - **Uploading:** at the end of a session, anyone in it who's on a team can upload it. Uploads are deduplicated by (team, session ID), so if everyone taps "add" it's only stored once. A session can go to more than one team, once each
 - **Loaded team data** (e.g. previous leads) is visible to everyone in the session, including guests, since anyone knocking benefits from references
 - **Everyone's paths are uploaded**, including guests without accounts. The join screen says so: "your path may be saved to the crew's team map"
-- **Grace period:** session data stays on the server for about 7 days so someone can upload it later if everyone skipped the prompt or a phone died. Sessions nobody uploads are deleted after that
-- After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and lead grades are saved. No names or phone numbers are ever stored. The raw GPS points are deleted
+- **Grace period:** session data stays on the server for 7 days so someone can upload it later if everyone skipped the prompt or a phone died. Sessions nobody uploads are deleted after that, and raw GPS points are always deleted after 7 days
+- After a session, GPS trails are snapped to streets (map matching). The snapped paths, worked streets, blocks and lead grades are saved. No names or phone numbers are ever stored
 - **Positioning:** the history is the crew's shared memory, not a way for a manager to track people. Paths are saved as streets walked per session, not a minute-by-minute record of where someone was
 
 ## Why It's Different
@@ -241,7 +280,7 @@ Validated market (D2D software is a real category) but the lightweight peer-coor
 - 1st/2nd/3rd Overall
 - Most Adventurous ("discover the unknown"): the map shows where the crew hasn't been yet
 - Best Use of Tiger Data: hypertables for GPS pings, PostGIS for streets and blocks, continuous aggregates for stats
-- Best Use of Vultr: hosts the server and OSRM map matching
+- Best Use of Vultr: hosts the server, map matching and map tiles
 - Best Use of Auth0: accounts and team invites
 - Best Domain Name from GoDaddy Registry
 - Best Use of Entire: use Sessions and Graph while building
@@ -251,17 +290,37 @@ Check how many prize tracks one project can enter.
 
 **Who does what:**
 
-- Tristan: backend (server, database, map matching, deployment)
-- Jasmine: mobile app
-- Web app: split once those are done
+| Person  | Owns                                                                                      |
+| ------- | ----------------------------------------------------------------------------------------- |
+| Jasmine | Mobile app, UI and design                                                                 |
+| Tristan | Server, database, Vultr deployment, map matching, map tiles, data scripts, simulated crew |
+| Both    | Shared types package, then split the web app                                              |
 
 **Priorities:**
 
-1. Mobile: sessions, live map, worked vs passed-by streets, blocks, A/B/C leads, planning mode, simulated crew mode
+1. Mobile: sessions, area picker, live map, worked vs passed-by streets, blocks, A/B/C leads, planning mode, simulated crew mode, offline
 2. Server and database on Vultr + Tiger Data, with uploads to teams
 3. Web: team map with paths and lead-rate colours, time slider, stats
 4. Everything else in the web section
 
-**Demo:** seed the database with a few weeks of fake past sessions so the web map already has history. Then run a simulated session on the phone and show it appear on the web map after upload.
+**Demo (about 3 minutes):**
 
-**Before the event:** get a basic Expo app with background location running on both an iPhone and an Android. Background location permissions are the most likely thing to cost hours during the hackathon.
+1. Show the web team map with weeks of seeded London history
+2. On the phone, create a session, pick an area, tap Suggest
+3. Start simulated crew mode, and the map fills in live
+4. Mark an A lead and watch the alert appear for everyone
+5. End the session, upload it to the team, and see it on the web map
+
+**Before the event:**
+
+- Basic Expo dev build with background location and MapLibre running on both an iPhone and an Android
+- Vultr VM and Tiger Data instance created, domain registered and pointed at the VM
+- Agree on the shared types (`packages/shared`) so both sides can build against a mock server
+- Block data and map tiles prepared for one London demo neighbourhood
+
+**Biggest risks:**
+
+- Background location on iOS and Android
+- Offline map downloads working with Expo
+- OSRM memory on the VM (London extract only)
+- Battery drain on a long walk (batch pings every 15–30 seconds)
