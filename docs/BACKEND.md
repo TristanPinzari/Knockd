@@ -211,16 +211,28 @@ The `process-session` pg-boss job:
 
 ## Map data imports
 
-One-time TypeScript scripts in `apps/server/scripts/`, run per region (London first):
+TypeScript scripts in `apps/server/scripts/london/`. Downloads go to `apps/server/data/` (gitignored).
 
-| Data    | Source                                                      | Steps                                                                                                            |
-| ------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Roads   | OpenStreetMap Ontario extract (Geofabrik)                   | Clip to London with `osmium`, import with `osm2pgsql`, keep walkable/residential roads → `streets`               |
-| Blocks  | Generated from roads                                        | `ST_Polygonize` on the road network, drop very large or very small polygons → `blocks`                           |
-| Houses  | Microsoft Canadian building footprints                      | Clip to London, import with `ogr2ogr`, drop non-residential sizes, assign to block and nearest street → `houses` |
-| Census  | Statistics Canada 2021 dissemination areas + census profile | Join boundaries with median household income → `census_areas`                                                    |
-| OSRM    | Same London `.osm.pbf`                                      | `osrm-extract` (foot profile) → `osrm-partition` → `osrm-customize`                                              |
-| Basemap | Protomaps daily build                                       | `pmtiles extract` with a London bounding box → `london.pmtiles`                                                  |
+```
+pnpm --filter @knockd/server data:download   # OSM roads + buildings via Overpass (4×4 tiles, resumable)
+pnpm --filter @knockd/server data:import     # stage → build.sql → streets, blocks, houses
+pnpm --filter @knockd/server data:census     # StatCan DAs + median household income
+```
+
+| Data    | Source                                                                                                            | Steps                                                                                                                                                                        |
+| ------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Roads   | OpenStreetMap via the Overpass API                                                                                | Split every road at every intersection (`ST_Node`) → street segments on residential/local roads → `streets`                                                                  |
+| Blocks  | Generated from roads                                                                                              | `ST_Polygonize` on the road network (1,500–400,000 m²). Houses left outside (cul-de-sac subdivisions) are grouped by street into extra blocks. Blocks with no houses dropped |
+| Houses  | OpenStreetMap buildings (good coverage in London thanks to municipal imports)                                     | Residential buildings of 40–600 m², assigned to a block and their nearest street within ~70 m → `houses`                                                                     |
+| Census  | StatCan 2021 DA boundary shapefile + Census Profile (DA, Ontario CSV). Downloaded by hand: StatCan blocks scripts | DAs around London, characteristic 243 (median total income of household) → `census_areas`                                                                                    |
+| OSRM    | London `.osm` extract                                                                                             | `osrm-extract` (foot profile) → `osrm-partition` → `osrm-customize`                                                                                                          |
+| Basemap | Protomaps daily build                                                                                             | `pmtiles extract` with a London bounding box → `london.pmtiles`                                                                                                              |
+
+**London as imported:** 14,082 street segments, 4,037 blocks, 112,188 houses (97% in a block, median 18 per block), 626 census areas (613 with income, median $84,000).
+
+`build.sql` refuses to run once sessions reference the map data, since rebuilding renumbers streets, blocks and houses.
+
+Credits: "© OpenStreetMap contributors" (ODbL); Statistics Canada, 2021 Census (Open Government Licence – Canada).
 
 ---
 

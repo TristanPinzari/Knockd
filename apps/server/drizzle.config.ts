@@ -1,4 +1,8 @@
+import { existsSync } from "node:fs";
 import { defineConfig } from "drizzle-kit";
+
+// Load apps/server/.env if present (Node's built-in loader). In production the env comes from Coolify.
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 export default defineConfig({
   dialect: "postgresql",

@@ -146,7 +146,7 @@ Loaded team data for the given cells. Empty if no map was loaded. Visible to eve
 
 ```ts
 → {
-  leads?: { houseId, grade, at }[],
+  leads?: { houseId, grade, note, at }[],  // at = last updated
   coverage?: FeatureCollection,          // paths with durationS and lastWorkedAt
   leadRate?: { blockId, rate | null, housesWorked }[]   // null = not enough data
 }
@@ -183,10 +183,22 @@ A batch of GPS points, sent every 15–30 seconds or when catching up after bein
 ### `POST /v1/sessions/:id/leads` 🎟️
 
 ```ts
-{ clientId, houseId, grade: "A" | "B" | "C" } → { lead }
+{ clientId, houseId, grade: "A" | "B" | "C", note?: string } → { lead }
+// note: optional, max 140 characters
+// lead = { clientId, memberId, houseId, grade, note, createdAt, updatedAt }
 ```
 
 Broadcasts `lead:new`.
+
+### `PATCH /v1/sessions/:id/leads/:clientId` 🎟️
+
+Edit a lead's grade or note. Updates `updatedAt`.
+
+```ts
+{ grade?: "A" | "B" | "C", note?: string | null } → { lead }   // note: null clears it
+```
+
+Broadcasts `lead:updated`.
 
 ### `DELETE /v1/sessions/:id/leads/:clientId` 🎟️
 
@@ -328,7 +340,7 @@ The client calculates visibility (duration × age) using the team's fade time.
 ### `GET /v1/maps/:id/leads?bbox=&grades=A,B&asOf=` 👤
 
 ```ts
-→ { leads: { houseId, lat, lng, grade, at }[] }
+→ { leads: { houseId, lat, lng, grade, note, at }[] }
 ```
 
 ### `GET /v1/maps/:id/stats?from=&to=` 👤
@@ -394,6 +406,7 @@ Connect with `auth: { token }` (session token). The server checks it and joins t
 | `member:status`           | `{ memberId, online }`                                    |
 | `positions`               | `{ positions: { memberId, lat, lng, t }[] }`              |
 | `lead:new`                | `{ lead, memberName }` (drives the alert and leaderboard) |
+| `lead:updated`            | `{ lead }`                                                |
 | `lead:removed`            | `{ clientId }`                                            |
 | `pin:new` / `pin:removed` | `{ pin }` / `{ clientId }`                                |
 | `message:new`             | `{ message }`                                             |

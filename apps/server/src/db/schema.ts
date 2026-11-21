@@ -227,7 +227,10 @@ export const leads = pgTable(
       .notNull()
       .references(() => houses.id),
     grade: leadGrade("grade").notNull(),
+    /** Optional short note (max 140 chars, enforced by the API). */
+    note: text("note"),
     createdAt: createdAt(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
     /** Set on undo. */
     deletedAt: ts("deleted_at"),
   },
