@@ -26,7 +26,6 @@ import { ago, km, pct, shortDate, Stat, ThemeToggle } from "../ui";
 import { MembersDialog } from "./MembersDialog";
 
 /** Below this zoom (wider than a whole city) the map shows no team data. */
-const MIN_DATA_ZOOM = 9;
 const DAY = 86_400_000;
 
 /** The team screen: the map is the stage, with a floating panel (maps, stats, sessions) and a time slider. */
@@ -43,7 +42,6 @@ export function TeamMap() {
   const [sessions, setSessions] = useState<GetTeamSessionsRes["sessions"]>([]);
   const [stats, setStats] = useState<MapStatsRes | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [zoomedOut, setZoomedOut] = useState(false);
   const [loadingLayers, setLoadingLayers] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
 
@@ -138,20 +136,14 @@ export function TeamMap() {
   const requestId = useRef(0);
   const loadLayers = useCallback(async () => {
     if (!map || !team) return;
-    if (map.getZoom() < MIN_DATA_ZOOM) {
-      setZoomedOut(true);
-      return;
-    }
-    setZoomedOut(false);
     const id = ++requestId.current;
-    const b = map.getBounds();
-    const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((x) => x.toFixed(5)).join(",");
+    const bbox = "-180,-90,180,90"; // the whole map at once, so nothing reloads while panning
     const time = asOf ? `&asOf=${new Date(asOf).toISOString()}` : "";
     setLoadingLayers(true);
     const none: FeatureCollection = { type: "FeatureCollection", features: [] };
     try {
-      // Session data (blocks, streets, leads) for what's on screen. Highlights and notes are loaded
-      // separately, all at once (loadMarkings), so they stay put while the map moves.
+      // Session data (blocks, streets, leads) for the selected map, loaded once and always shown.
+      // Highlights and notes are loaded separately (loadMarkings).
       const [paths, blocks, leads] = await Promise.all([
         current ? api<FeatureCollection>(`/v1/maps/${current.id}/paths?bbox=${bbox}${time}`) : none,
         current ? api<MapBlocksRes>(`/v1/maps/${current.id}/blocks?bbox=${bbox}${time}`) : { blocks: [] },
@@ -196,12 +188,9 @@ export function TeamMap() {
 
   useEffect(() => {
     if (!map) return;
-    const first = setTimeout(loadLayers, 0); // load now, then on every pan and zoom
-    map.on("moveend", loadLayers);
-    return () => {
-      clearTimeout(first);
-      map.off("moveend", loadLayers);
-    };
+    // When the map, time slider or basemap changes; not on pan and zoom.
+    const t = setTimeout(loadLayers, 0);
+    return () => clearTimeout(t);
   }, [map, loadLayers, styleKey]);
 
   // ---------- Marking the map ----------
@@ -542,7 +531,7 @@ export function TeamMap() {
             </span>
           </div>
           <p className="muted small" style={{ marginTop: 8 }}>
-            Lines are streets walked: stronger = longer and more recent. Colours compare blocks on screen.
+            Lines are streets walked: stronger = longer and more recent. Colours compare the map’s blocks.
           </p>
 
           <div className="section-title">Sessions</div>
@@ -577,10 +566,10 @@ export function TeamMap() {
         </div>
       )}
 
-      {(zoomedOut || loadingLayers) && (
+      {loadingLayers && (
         <div className="card float-top-right" style={{ padding: "10px 16px", borderRadius: 999 }}>
           <span className="small" style={{ fontWeight: 600 }}>
-            {zoomedOut ? "Zoom in to the city to see the team’s map" : "Loading…"}
+            Loading…
           </span>
         </div>
       )}

@@ -106,7 +106,7 @@ const setData = (map: maplibregl.Map, id: SourceId, data: FeatureCollection) =>
 // ---------- Blocks ----------
 
 /**
- * Blocks coloured by lead rate relative to what's on screen: the weakest blocks red, the middle
+ * Blocks coloured by lead rate relative to each other: the weakest blocks red, the middle
  * yellow, the best green. Grey = not enough houses worked yet (the API returns rate null).
  */
 export function setBlocks(map: maplibregl.Map, stats: MapBlocksRes["blocks"]) {
