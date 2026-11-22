@@ -343,6 +343,14 @@ socket.on("plan:updated", ({ plan, version }) => {
 - **Undo/redo** are your own ops reversed: undo `claim` → `unclaim`, `draw` → `erase`, `note` → `removeNote`. Keep the stroke or note so redo can send it again
 - Planning edits need a connection. If the ack fails, say "Didn't save: no connection", don't queue it
 
+**Built** (step 6). The pencil button on the Live map opens planning mode; Done closes it:
+
+- **Tools:** Move (the map moves as usual), Claim (tap blocks), Route, Draw, Note (tap the map; tap a note to edit or delete it), Eraser (drag over lines and notes; tap a claimed block to unclaim everyone on it). Route, Draw and Eraser take over one-finger drags, so switch to Move to pan
+- While planning, every loaded block shows a dashed outline. Claimed blocks fill in the claimer's colour, and a pair's block is outlined in the second person's colour. Every route gets an arrow tip
+- Colours: you first, then the crew, then "More colours" for utility ones. Claims need a person
+- Undo/redo cover only your own actions, including undoing an erase of a teammate's line
+- Code: `src/plan/planOps.ts` (ops per tool, the eraser, undo; pure and tested), `planEditor.ts` (tool, colour, undo stacks, sending), `planGeo.ts` (plan → map GeoJSON), `usePlanning.ts` (taps and strokes → ops); UI in `src/ui/plan/`; map layers in `src/map/layers/PlanLayers.tsx`
+
 ### Suggest (runs on the phone)
 
 To see what it should look like, open [suggest-viewer.html](suggest-viewer.html) in a browser (or run `pnpm open:suggest`). It runs the same `suggestRoutes`, and shows routes, two-colour dashes for groups, numbered houses, U-turn badges and the walk to the meeting point.

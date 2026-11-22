@@ -18,6 +18,7 @@ import { dispatchHouseGesture, firstHouseId, nextZoom } from "./interactions";
 import { HouseLayers } from "./layers/HouseLayers";
 import { MemberPin } from "./layers/MemberPin";
 import { OutskirtsLayer } from "./layers/OutskirtsLayer";
+import { BLOCKS_HIT_LAYER_ID, NOTES_HIT_LAYER_ID, PlanBlocks, PlanLines, PlanNotes } from "./layers/PlanLayers";
 import { RouteBadges, RouteLines } from "./layers/RouteLayers";
 import { TrailLayers } from "./layers/TrailLayers";
 import type { Bounds, KnockdMapHandle, KnockdMapProps } from "./types";
@@ -38,8 +39,11 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
     houses,
     leads,
     showCrewPaths,
+    plan,
+    planBlocks,
     onHousePress,
     onHouseLongPress,
+    onPlanTap,
     onZoomChange,
   } = props;
   const mapStyle = useKnockdStyle();
@@ -81,18 +85,40 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
         const target = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, (lastZoom.current ?? zoom) + delta));
         cameraRef.current?.zoomTo(target, { duration: 300 });
       },
+      unproject: async (points) => {
+        const map = mapRef.current;
+        if (!map) return [];
+        const coords = await Promise.all(points.map(([x, y]) => map.unproject([x, y])));
+        return coords.map(([lng, lat]) => ({ lat, lng }));
+      },
+      getZoom: async () => (await mapRef.current?.getZoom()) ?? lastZoom.current ?? zoom,
     }),
     [fit, zoom],
   );
 
   const hit = useCallback(
     async (kind: "tap" | "longPress", e: NativeSyntheticEvent<PressEvent>) => {
-      const features = await mapRef.current?.queryRenderedFeatures(e.nativeEvent.point, {
-        layers: [HOUSES_HIT_LAYER_ID],
-      });
+      const map = mapRef.current;
+      if (!map) return;
+      const { point, lngLat } = e.nativeEvent;
+      if (kind === "tap" && onPlanTap) {
+        const [blocks, notes] = await Promise.all([
+          planBlocks ? map.queryRenderedFeatures(point, { layers: [BLOCKS_HIT_LAYER_ID] }) : [],
+          map.queryRenderedFeatures(point, { layers: [NOTES_HIT_LAYER_ID] }),
+        ]);
+        const blockId = Number(blocks[0]?.properties?.blockId);
+        const noteId = notes[0]?.properties?.id;
+        onPlanTap({
+          at: { lng: lngLat[0], lat: lngLat[1] },
+          blockId: Number.isFinite(blockId) ? blockId : null,
+          noteId: typeof noteId === "string" ? noteId : null,
+        });
+        return;
+      }
+      const features = await map.queryRenderedFeatures(point, { layers: [HOUSES_HIT_LAYER_ID] });
       dispatchHouseGesture(kind, firstHouseId(features ?? []), { onHousePress, onHouseLongPress });
     },
-    [onHousePress, onHouseLongPress],
+    [onHousePress, onHouseLongPress, onPlanTap, planBlocks],
   );
 
   const onRegionDidChange = useCallback(
@@ -127,10 +153,13 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
         maxBounds={clamp ? toTuple(clamp) : undefined}
       />
       {workArea ? <OutskirtsLayer workArea={workArea} /> : null}
+      <PlanBlocks plan={plan} blocks={planBlocks} />
       {hasPlan ? null : <TrailLayers data={trailData} />}
       <RouteLines data={routeData} />
+      <PlanLines plan={plan} />
       <HouseLayers houses={houseData} leads={leadData} />
       <RouteBadges data={routeData} />
+      <PlanNotes plan={plan} />
       {members.map((m) => (
         <MemberPin key={m.memberId} member={m} />
       ))}

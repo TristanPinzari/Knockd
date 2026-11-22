@@ -8,6 +8,7 @@ import { useOvertakeStore } from "../realtime/stores/overtakeStore";
 import { usePinsStore } from "../realtime/stores/pinsStore";
 import { usePlanStore } from "../realtime/stores/planStore";
 import { useSessionStore } from "../realtime/stores/sessionStore";
+import { usePlanEditor } from "../plan/planEditor";
 import { useTrailsStore } from "../trails/trailsStore";
 import { useSessionUi } from "./uiStore";
 import { createSessionLifecycle } from "./lifecycle";
@@ -18,6 +19,7 @@ export function resetLiveStores(): void {
   useLeadsStore.getState().reset();
   usePinsStore.getState().reset();
   usePlanStore.getState().reset();
+  usePlanEditor.getState().reset();
   useChatStore.getState().reset();
   useOvertakeStore.getState().reset();
   useSessionStore.getState().reset();

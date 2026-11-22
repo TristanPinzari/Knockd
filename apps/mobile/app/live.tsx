@@ -24,6 +24,12 @@ import {
   Text,
 } from "@/ui";
 import { LiveMap, useLiveMapData } from "@/ui/liveMap";
+import { usePlanEditor } from "@/plan/planEditor";
+import { usePlanning, type NoteDraft } from "@/plan/usePlanning";
+import { DrawOverlay, NoteSheet, PlanPanel } from "@/ui/plan";
+
+/** Tools that draw with one finger (the map then doesn't move). */
+const DRAWING_TOOLS = new Set(["route", "freehand", "eraser"]);
 
 /** How long a teammate's lead alert stays up. */
 const LEAD_ALERT_MS = 5000;
@@ -71,6 +77,15 @@ export default function LiveMapScreen() {
   const [message, setMessage] = useState<string | null>(null);
   /** Measured height of the top bar (it grows when the location notice shows). */
   const [barHeight, setBarHeight] = useState(0);
+  // Planning mode (MOBILE.md screen 7): tools on the live map, shared live with the crew.
+  const planning = usePlanEditor((s) => s.planning);
+  const tool = usePlanEditor((s) => s.tool);
+  const canUndo = usePlanEditor((s) => s.undoStack.length > 0);
+  const canRedo = usePlanEditor((s) => s.redoStack.length > 0);
+  const planMessage = usePlanEditor((s) => s.message);
+  const [panelHeight, setPanelHeight] = useState(0);
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
+  const planningTools = usePlanning(mapRef, myId, setNoteDraft);
 
   const lead = useMemo(() => leadOnHouse(leads, houseId), [leads, houseId]);
   const markedBy = lead && lead.memberId !== myId ? (crew[lead.memberId]?.name ?? "a teammate") : null;
@@ -99,8 +114,11 @@ export default function LiveMapScreen() {
   };
 
   const pending = pendingLabel(live.pending);
+  const toast = planMessage ?? message ?? pending;
   // Banners sit just under the top bar, whatever its height.
   const top = (barHeight || insets.top + TOP_BAR_ESTIMATE) + BANNER_GAP;
+  // Buttons and the toast sit above the planning panel while it's open.
+  const bottomGap = planning ? panelHeight + 12 : insets.bottom + 24;
 
   return (
     <Screen>
@@ -113,7 +131,17 @@ export default function LiveMapScreen() {
           setMessage(null);
           setHouseId(id);
         }}
+        planning={planning}
+        onPlanTap={planningTools.onPlanTap}
       />
+      {planning && DRAWING_TOOLS.has(tool) ? (
+        <DrawOverlay
+          colour={tool === "eraser" ? colors.ink.secondary : planningTools.inkColour}
+          dashed={tool === "route"}
+          eraser={tool === "eraser"}
+          onStroke={planningTools.onStroke}
+        />
+      ) : null}
 
       <View
         style={[styles.topBar, { paddingTop: insets.top + 8 }]}
@@ -138,7 +166,7 @@ export default function LiveMapScreen() {
               </Text>
             </View>
             <Text variant="caption" color={colors.ink.muted} numberOfLines={1}>
-              Long-press a house to mark a lead
+              {planning ? "Planning · everyone sees changes live" : "Long-press a house to mark a lead"}
             </Text>
           </View>
           <View style={styles.faces}>
@@ -161,7 +189,18 @@ export default function LiveMapScreen() {
         />
       ) : null}
 
-      <View style={[styles.controls, { bottom: insets.bottom + 24 }]}>
+      <View style={[styles.controls, { bottom: bottomGap }]}>
+        {planning ? null : (
+          <RaisedRoundButton
+            icon="edit-3"
+            size={44}
+            accessibilityLabel="Plan with the crew"
+            onPress={() => {
+              setHouseId(null);
+              usePlanEditor.getState().setPlanning(true);
+            }}
+          />
+        )}
         <View style={styles.zoom}>
           <Pressable accessibilityLabel="Zoom in" style={styles.zoomHalf} onPress={() => mapRef.current?.zoomBy(1)}>
             <Icon name="plus" size={22} color={colors.ink.primary} />
@@ -174,12 +213,55 @@ export default function LiveMapScreen() {
         <RaisedRoundButton icon="crosshair" size={44} accessibilityLabel="Centre on me" onPress={centreOnMe} />
       </View>
 
-      {pending || message ? (
-        <View style={[styles.toast, { bottom: insets.bottom + 24 }]}>
+      {toast ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          onPress={() => {
+            setMessage(null);
+            usePlanEditor.getState().setMessage(null);
+          }}
+          style={[styles.toast, { bottom: bottomGap }]}
+        >
           <Text variant="caption" color={colors.ink.secondary}>
-            {message ?? pending}
+            {toast}
           </Text>
-        </View>
+        </Pressable>
+      ) : null}
+
+      {planning ? (
+        <PlanPanel
+          tool={tool}
+          ink={planningTools.ink}
+          memberInks={planningTools.memberInks}
+          utilityInks={planningTools.utilityInks}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onTool={(t) => usePlanEditor.getState().setTool(t)}
+          onInk={(ink) => usePlanEditor.getState().setInk(ink)}
+          onUndo={() => myId && void usePlanEditor.getState().undo(myId)}
+          onRedo={() => myId && void usePlanEditor.getState().redo(myId)}
+          onClearMine={planningTools.clearMine}
+          onDone={() => usePlanEditor.getState().setPlanning(false)}
+          onLayout={(e) => setPanelHeight(e.nativeEvent.layout.height)}
+        />
+      ) : null}
+
+      {noteDraft ? (
+        <NoteSheet
+          initialText={noteDraft.text}
+          editing={noteDraft.id !== null}
+          colour={planningTools.inkColour}
+          onSave={(text) => {
+            planningTools.saveNote(noteDraft, text);
+            setNoteDraft(null);
+          }}
+          onDelete={() => {
+            if (noteDraft.id) planningTools.removeNote(noteDraft.id);
+            setNoteDraft(null);
+          }}
+          onClose={() => setNoteDraft(null)}
+        />
       ) : null}
 
       {houseId !== null ? (
