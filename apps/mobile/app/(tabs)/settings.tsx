@@ -18,7 +18,7 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <FlatHeader title="Settings" />
+      <FlatHeader title="Settings" showBack={false} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <SessionSettingsCard />
 

@@ -14,6 +14,7 @@ export default function ChatScreen() {
       <FlatHeader
         title="Crew chat"
         titleVariant="heading"
+        showBack={false}
         subtitle="4 crew, live"
         right={
           <View style={{ flexDirection: "row" }}>
@@ -260,8 +261,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 34,
+    paddingVertical: 12,
     backgroundColor: colors.bg.card,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border.soft,

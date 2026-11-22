@@ -1,7 +1,7 @@
-import { Pressable, View } from "react-native";
+import { Pressable } from "react-native";
 import { colors, shadows } from "@/theme";
 import { Icon, type IconName } from "./Icon";
-import { Text } from "./Text";
+import { Badge } from "./Badge";
 
 interface RaisedRoundButtonProps {
   icon: IconName;
@@ -38,27 +38,7 @@ export function RaisedRoundButton({
       ]}
     >
       <Icon name={icon} size={Math.round(size * 0.45)} color={iconColor} />
-      {badge ? (
-        <View
-          style={{
-            position: "absolute",
-            top: -4,
-            right: -4,
-            minWidth: 20,
-            height: 20,
-            borderRadius: 10,
-            backgroundColor: colors.brand,
-            alignItems: "center",
-            justifyContent: "center",
-            borderWidth: 2,
-            borderColor: colors.bg.card,
-          }}
-        >
-          <Text variant="captionStrong" color={colors.ink.onBrand} style={{ fontSize: 11, lineHeight: 13 }}>
-            {badge}
-          </Text>
-        </View>
-      ) : null}
+      {badge ? <Badge count={badge} style={{ top: -4, right: -4 }} /> : null}
     </Pressable>
   );
 }

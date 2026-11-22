@@ -29,7 +29,6 @@ import { useActiveSession } from "@/session";
 import { useSuggestRoutes } from "@/session/useSuggestRoutes";
 
 type Scenario = "default" | "offline" | "lead" | "passed";
-const UNREAD_CHAT = 2;
 /** Until the sheet is measured. */
 const DEFAULT_SHEET_HEIGHT = 134;
 const CONTROLS_GAP = 16;
@@ -78,15 +77,7 @@ export default function LiveMapScreen() {
 
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <View style={styles.topRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Menu"
-            onPress={() => router.push("/settings")}
-            hitSlop={10}
-          >
-            <Icon name="menu" size={22} color={colors.ink.primary} />
-          </Pressable>
-          <Text variant="bodyStrong" style={{ flex: 1, marginLeft: 16 }}>
+          <Text variant="bodyStrong" style={{ flex: 1 }}>
             {crewOn ? "Section progress" : `Your section, ${toPercent(me?.value ?? 0)}`}
           </Text>
           <Text variant="body" color={colors.ink.secondary} style={{ marginRight: 8 }}>
@@ -134,13 +125,6 @@ export default function LiveMapScreen() {
           </Pressable>
         </View>
         <RaisedRoundButton icon="crosshair" size={44} accessibilityLabel="Centre on me" onPress={centreOnMe} />
-        <RaisedRoundButton
-          icon="message-circle"
-          size={44}
-          badge={UNREAD_CHAT}
-          accessibilityLabel="Crew chat"
-          onPress={() => router.push("/chat")}
-        />
       </View>
 
       <BottomSheet style={styles.hintSheet} onLayout={(e) => setSheetHeight(e.nativeEvent.layout.height)}>
