@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/mapview.tsx","./src/api.ts","./src/config.ts","./src/main.tsx","./src/theme.ts","./src/ui.tsx","./src/map/draw.ts","./src/map/layers.ts","./src/pages/acceptinvite.tsx","./src/pages/landing.tsx","./src/pages/membersdialog.tsx","./src/pages/teammap.tsx","./src/pages/teams.tsx","./vite.config.ts"],"version":"5.8.3"}

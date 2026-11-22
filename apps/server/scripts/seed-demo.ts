@@ -11,6 +11,9 @@
  *   pnpm seed:demo              create the team if missing, add sessions, print an invite link
  *   pnpm seed:demo --reset      delete the demo team and its sessions, then regenerate
  *   pnpm seed:demo --promote    make everyone who joined via the invite an editor
+ *   pnpm seed:demo --team <id> [--sessions 8]
+ *                               add made-up sessions to an existing team, uploaded by its owner
+ *                               (different each run, so running it again adds more)
  */
 import { randomBytes } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -43,7 +46,9 @@ const NOTES = [
 /** Byron, where crews work. */
 const BYRON = { minLat: 42.944, maxLat: 42.97, minLng: -81.37, maxLng: -81.325 };
 
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
+const argValue = (name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
 
 // Deterministic randomness (mulberry32), so re-running gives the same history.
 let seed = 20261121;
@@ -57,6 +62,19 @@ const pick = <T>(list: T[]) => list[Math.floor(rand() * list.length)]!;
 const between = (lo: number, hi: number) => lo + rand() * (hi - lo);
 
 async function main() {
+  // ---------- --team: made-up sessions for an existing team ----------
+  const teamId = argValue("--team");
+  if (teamId) {
+    const [existing] = await db.select().from(teams).where(eq(teams.id, teamId));
+    if (!existing) throw new Error(`No team with id ${teamId}`);
+    const count = Number(argValue("--sessions") ?? 8);
+    seed = Date.now() | 0; // a new history each run
+    console.log(`Adding ${count} sessions to "${existing.name}"`);
+    await addSessions(existing.id, existing.createdBy, count);
+    await refreshAggregates();
+    return;
+  }
+
   // ---------- owner + team ----------
   await db.insert(users).values({ auth0Sub: OWNER_SUB, displayName: "Demo Owner" }).onConflictDoNothing();
   const [owner] = await db.select().from(users).where(eq(users.auth0Sub, OWNER_SUB));
@@ -94,106 +112,7 @@ async function main() {
     ]);
     console.log(`✓ Created team "${TEAM_NAME}" with maps World Map and Byron`);
 
-    // ---------- houses → block → receptiveness (from census income) ----------
-    const houseRows = await db.execute<{
-      id: number;
-      block_id: number;
-      income: number | null;
-      lat: number;
-      lng: number;
-    }>(sql`
-      SELECT h.id, h.block_id, ST_Y(h.centroid) AS lat, ST_X(h.centroid) AS lng,
-             (SELECT ca.median_household_income FROM census_areas ca WHERE ST_Contains(ca.geom, h.centroid) LIMIT 1) AS income
-      FROM houses h
-      WHERE h.block_id IS NOT NULL
-        AND h.centroid && ST_MakeEnvelope(${BYRON.minLng - 0.01}, ${BYRON.minLat - 0.01}, ${BYRON.maxLng + 0.01}, ${BYRON.maxLat + 0.01}, 4326)`);
-    const blockOf = new Map<number, number>();
-    const receptiveness = new Map<number, number>();
-    for (const h of houseRows) {
-      const block = Number(h.block_id);
-      blockOf.set(Number(h.id), block);
-      if (!receptiveness.has(block)) {
-        const incomeFactor = Math.min(1.8, Math.max(0.5, (h.income ?? 84_000) / 84_000));
-        receptiveness.set(block, incomeFactor * between(0.3, 1.7));
-      }
-    }
-
-    // ---------- sessions ----------
-    const days = Array.from({ length: SESSIONS }, (_, i) => Math.round(2 + (i * (DAYS_BACK - 2)) / (SESSIONS - 1)));
-    for (const [i, daysAgo] of days.entries()) {
-      // Centre each shift on a real house inside Byron, so it's always in a residential area.
-      const inByron = houseRows.filter(
-        (h) => h.lat > BYRON.minLat && h.lat < BYRON.maxLat && h.lng > BYRON.minLng && h.lng < BYRON.maxLng,
-      );
-      const { lat, lng } = pick(inByron);
-      const centre = { lat, lng };
-      const start = new Date();
-      start.setUTCDate(start.getUTCDate() - daysAgo);
-      start.setUTCHours(22, 0, 0, 0); // 5 pm in London, ON (EST)
-      const crew = [...CREW].sort(() => rand() - 0.5).slice(0, rand() < 0.5 ? 3 : 4);
-
-      const [session] = await db
-        .insert(sessions)
-        .values({
-          joinCode: randomBytes(4).toString("hex").slice(0, 6).toUpperCase(),
-          status: "ended",
-          startedAt: start,
-          plannedArea: sql`ST_Buffer(ST_SetSRID(ST_MakePoint(${centre.lng}, ${centre.lat}), 4326)::geography, 350)::geometry(Polygon, 4326)`,
-        })
-        .returning({ id: sessions.id });
-      const sessionId = session!.id;
-      const members = await db
-        .insert(sessionMembers)
-        .values(crew.map((name, j) => ({ sessionId, displayName: name, colour: COLOURS[j]!, joinedAt: start })))
-        .returning({ id: sessionMembers.id });
-      await db.update(sessions).set({ createdByMemberId: members[0]!.id }).where(eq(sessions.id, sessionId));
-
-      const routes = await planRoutes(
-        sessionId,
-        members.map((m) => m.id),
-        PACE,
-        null,
-      );
-
-      let pingCount = 0;
-      let leadCount = 0;
-      let lastT = start.getTime();
-      for (const m of members) {
-        const { pings, leads } = walkShift(
-          routes.get(m.id) ?? [],
-          start.getTime() + between(0, 300_000),
-          blockOf,
-          receptiveness,
-        );
-        for (let k = 0; k < pings.length; k += 2000) {
-          await db.execute(sql`
-            INSERT INTO pings (time, session_id, member_id, client_id, location, accuracy_m)
-            SELECT to_timestamp((x->>'t')::double precision / 1000), ${sessionId}, ${m.id}, gen_random_uuid(),
-                   ST_SetSRID(ST_MakePoint((x->>'lng')::float, (x->>'lat')::float), 4326), (x->>'acc')::real
-            FROM jsonb_array_elements(${JSON.stringify(pings.slice(k, k + 2000))}::jsonb) x`);
-        }
-        if (leads.length)
-          await db.execute(sql`
-            INSERT INTO leads (id, session_id, member_id, house_id, grade, note, created_at, updated_at)
-            SELECT gen_random_uuid(), ${sessionId}, ${m.id}, (x->>'houseId')::bigint, (x->>'grade')::lead_grade,
-                   x->>'note', to_timestamp((x->>'t')::double precision / 1000), to_timestamp((x->>'t')::double precision / 1000)
-            FROM jsonb_array_elements(${JSON.stringify(leads)}::jsonb) x`);
-        pingCount += pings.length;
-        leadCount += leads.length;
-        lastT = Math.max(lastT, pings.at(-1)?.t ?? lastT);
-      }
-      await db
-        .update(sessions)
-        .set({ endedAt: new Date(lastT) })
-        .where(eq(sessions.id, sessionId));
-      await processSession(sessionId);
-      await db
-        .insert(teamSessions)
-        .values({ teamId: team!.id, sessionId, uploadedBy: owner!.id, uploadedAt: new Date(lastT) });
-      console.log(
-        `  ${String(i + 1).padStart(2)}/${SESSIONS}  ${daysAgo} days ago  ${crew.join(", ")}  ${pingCount} pings, ${leadCount} leads`,
-      );
-    }
+    await addSessions(team!.id, owner!.id, SESSIONS);
 
     // ---------- highlights & notes on never-worked blocks (what a boss would mark on the web) ----------
     const fresh = await db.execute<{ id: number }>(sql`
@@ -232,10 +151,7 @@ async function main() {
         SELECT ${team!.id}, ST_PointOnSurface(geom), ${text}, ${owner!.id} FROM blocks WHERE id = ${blockId}`);
     console.log("✓ Added 3 highlights and 3 notes on never-worked blocks");
 
-    // Raw pings older than the aggregates' refresh window would otherwise never be summarised.
-    for (const view of ["member_activity_1m", "leads_hourly", "knock_rate_hourly"])
-      await pg.unsafe(`CALL refresh_continuous_aggregate('${view}', NULL, NULL)`);
-    console.log("✓ Refreshed continuous aggregates");
+    await refreshAggregates();
   } else {
     console.log(`✓ Team "${TEAM_NAME}" already exists (use --reset to regenerate)`);
   }
@@ -248,6 +164,120 @@ async function main() {
   console.log(`Invite (7 days): ${env.INVITE_BASE_URL}/${token}`);
   console.log(`  Accept with your login token: POST /v1/invites/${token}/accept`);
   console.log("  Then run `pnpm seed:demo --promote` to make everyone who joined an editor.");
+}
+
+/** Raw pings older than the aggregates' refresh window would otherwise never be summarised. */
+async function refreshAggregates() {
+  for (const view of ["member_activity_1m", "leads_hourly", "knock_rate_hourly"])
+    await pg.unsafe(`CALL refresh_continuous_aggregate('${view}', NULL, NULL)`);
+  console.log("✓ Refreshed continuous aggregates");
+}
+
+/**
+ * Makes up `count` past sessions around Byron, spread over the last 6 weeks, runs each
+ * through the real processing and uploads it to the team as `uploaderId`.
+ */
+async function addSessions(teamId: string, uploaderId: string, count: number) {
+  // ---------- houses → block → receptiveness (from census income) ----------
+  const houseRows = await db.execute<{
+    id: number;
+    block_id: number;
+    income: number | null;
+    lat: number;
+    lng: number;
+  }>(sql`
+    SELECT h.id, h.block_id, ST_Y(h.centroid) AS lat, ST_X(h.centroid) AS lng,
+           (SELECT ca.median_household_income FROM census_areas ca WHERE ST_Contains(ca.geom, h.centroid) LIMIT 1) AS income
+    FROM houses h
+    WHERE h.block_id IS NOT NULL
+      AND h.centroid && ST_MakeEnvelope(${BYRON.minLng - 0.01}, ${BYRON.minLat - 0.01}, ${BYRON.maxLng + 0.01}, ${BYRON.maxLat + 0.01}, 4326)`);
+  const blockOf = new Map<number, number>();
+  const receptiveness = new Map<number, number>();
+  for (const h of houseRows) {
+    const block = Number(h.block_id);
+    blockOf.set(Number(h.id), block);
+    if (!receptiveness.has(block)) {
+      const incomeFactor = Math.min(1.8, Math.max(0.5, (h.income ?? 84_000) / 84_000));
+      receptiveness.set(block, incomeFactor * between(0.3, 1.7));
+    }
+  }
+
+  // ---------- sessions ----------
+  const days = Array.from({ length: count }, (_, i) => Math.round(2 + (i * (DAYS_BACK - 2)) / Math.max(1, count - 1)));
+  for (const [i, daysAgo] of days.entries()) {
+    // Centre each shift on a real house inside Byron, so it's always in a residential area.
+    const inByron = houseRows.filter(
+      (h) => h.lat > BYRON.minLat && h.lat < BYRON.maxLat && h.lng > BYRON.minLng && h.lng < BYRON.maxLng,
+    );
+    const { lat, lng } = pick(inByron);
+    const centre = { lat, lng };
+    const start = new Date();
+    start.setUTCDate(start.getUTCDate() - daysAgo);
+    start.setUTCHours(22, 0, 0, 0); // 5 pm in London, ON (EST)
+    const crew = [...CREW].sort(() => rand() - 0.5).slice(0, rand() < 0.5 ? 3 : 4);
+
+    const [session] = await db
+      .insert(sessions)
+      .values({
+        joinCode: randomBytes(4).toString("hex").slice(0, 6).toUpperCase(),
+        status: "ended",
+        startedAt: start,
+        plannedArea: sql`ST_Buffer(ST_SetSRID(ST_MakePoint(${centre.lng}, ${centre.lat}), 4326)::geography, 350)::geometry(Polygon, 4326)`,
+      })
+      .returning({ id: sessions.id });
+    const sessionId = session!.id;
+    const members = await db
+      .insert(sessionMembers)
+      .values(crew.map((name, j) => ({ sessionId, displayName: name, colour: COLOURS[j]!, joinedAt: start })))
+      .returning({ id: sessionMembers.id });
+    await db.update(sessions).set({ createdByMemberId: members[0]!.id }).where(eq(sessions.id, sessionId));
+
+    const routes = await planRoutes(
+      sessionId,
+      members.map((m) => m.id),
+      PACE,
+      null,
+    );
+
+    let pingCount = 0;
+    let leadCount = 0;
+    let lastT = start.getTime();
+    for (const m of members) {
+      const { pings, leads } = walkShift(
+        routes.get(m.id) ?? [],
+        start.getTime() + between(0, 300_000),
+        blockOf,
+        receptiveness,
+      );
+      for (let k = 0; k < pings.length; k += 2000) {
+        await db.execute(sql`
+          INSERT INTO pings (time, session_id, member_id, client_id, location, accuracy_m)
+          SELECT to_timestamp((x->>'t')::double precision / 1000), ${sessionId}, ${m.id}, gen_random_uuid(),
+                 ST_SetSRID(ST_MakePoint((x->>'lng')::float, (x->>'lat')::float), 4326), (x->>'acc')::real
+          FROM jsonb_array_elements(${JSON.stringify(pings.slice(k, k + 2000))}::jsonb) x`);
+      }
+      if (leads.length)
+        await db.execute(sql`
+          INSERT INTO leads (id, session_id, member_id, house_id, grade, note, created_at, updated_at)
+          SELECT gen_random_uuid(), ${sessionId}, ${m.id}, (x->>'houseId')::bigint, (x->>'grade')::lead_grade,
+                 x->>'note', to_timestamp((x->>'t')::double precision / 1000), to_timestamp((x->>'t')::double precision / 1000)
+          FROM jsonb_array_elements(${JSON.stringify(leads)}::jsonb) x`);
+      pingCount += pings.length;
+      leadCount += leads.length;
+      lastT = Math.max(lastT, pings.at(-1)?.t ?? lastT);
+    }
+    await db
+      .update(sessions)
+      .set({ endedAt: new Date(lastT) })
+      .where(eq(sessions.id, sessionId));
+    await processSession(sessionId);
+    await db
+      .insert(teamSessions)
+      .values({ teamId: teamId, sessionId, uploadedBy: uploaderId, uploadedAt: new Date(lastT) });
+    console.log(
+      `  ${String(i + 1).padStart(2)}/${count}  ${daysAgo} days ago  ${crew.join(", ")}  ${pingCount} pings, ${leadCount} leads`,
+    );
+  }
 }
 
 /** Walks a member's route at a realistic pace, producing pings and the odd lead. */
