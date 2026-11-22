@@ -4,31 +4,48 @@ import { memo } from "react";
 import type { PlanGeo } from "@/plan/planGeo";
 import { COLOURS } from "../constants";
 import { BADGE_FONT, zoomWidth } from "./styles";
+import { useLabelsAnchor } from "../labelsAnchor";
 
 export const BLOCKS_HIT_LAYER_ID = "knockd-plan-blocks-hit";
 export const NOTES_HIT_LAYER_ID = "knockd-plan-notes-dot";
 
 const LINE_WIDTH = zoomWidth([14, 2], [16, 3.5], [19, 7]);
 
-/** Claimed blocks, under everything else. In planning mode, also every block's outline and tap target. */
+/**
+ * Planning mode only: every block's outline and tap target, and the claimed blocks filled in the
+ * claimer's colour. Outside planning, claims aren't drawn: routes and trails already show who goes
+ * where, and a filled chunk just covers the map.
+ */
 function PlanBlocksBase({ plan, blocks }: { plan: PlanGeo; blocks: FeatureCollection<Polygon> | null }) {
+  const below = useLabelsAnchor();
+  if (!blocks) return null;
   return (
     <>
-      {blocks ? (
-        <GeoJSONSource id="knockd-plan-blocks" data={blocks}>
-          <Layer id={BLOCKS_HIT_LAYER_ID} type="fill" style={{ fillColor: COLOURS.white, fillOpacity: 0.01 }} />
-          <Layer
-            id="knockd-plan-blocks-outline"
-            type="line"
-            style={{ lineColor: COLOURS.houseOutline, lineWidth: 1, lineDasharray: [2, 2] }}
-          />
-        </GeoJSONSource>
-      ) : null}
+      <GeoJSONSource id="knockd-plan-blocks" data={blocks}>
+        <Layer
+          id={BLOCKS_HIT_LAYER_ID}
+          type="fill"
+          beforeId={below}
+          style={{ fillColor: COLOURS.white, fillOpacity: 0.01 }}
+        />
+        <Layer
+          id="knockd-plan-blocks-outline"
+          type="line"
+          beforeId={below}
+          style={{ lineColor: COLOURS.houseOutline, lineWidth: 1, lineDasharray: [2, 2] }}
+        />
+      </GeoJSONSource>
       <GeoJSONSource id="knockd-plan-claims" data={plan.claims}>
-        <Layer id="knockd-plan-claims-fill" type="fill" style={{ fillColor: ["get", "fill"], fillOpacity: 0.22 }} />
+        <Layer
+          id="knockd-plan-claims-fill"
+          type="fill"
+          beforeId={below}
+          style={{ fillColor: ["get", "fill"], fillOpacity: 0.22 }}
+        />
         <Layer
           id="knockd-plan-claims-outline"
           type="line"
+          beforeId={below}
           style={{
             lineColor: ["get", "outline"],
             lineWidth: ["case", [">", ["get", "count"], 1], 4, 2],
@@ -43,18 +60,21 @@ function PlanBlocksBase({ plan, blocks }: { plan: PlanGeo; blocks: FeatureCollec
 
 /** Freehand lines (solid), utility-colour routes (dashed) and every route's arrow tip. */
 function PlanLinesBase({ plan }: { plan: PlanGeo }) {
+  const below = useLabelsAnchor();
   return (
     <>
       <GeoJSONSource id="knockd-plan-lines" data={plan.lines}>
         <Layer
           id="knockd-plan-lines-solid"
           type="line"
+          beforeId={below}
           filter={["!", ["get", "dashed"]]}
           style={{ lineColor: ["get", "colour"], lineWidth: LINE_WIDTH, lineJoin: "round", lineCap: "round" }}
         />
         <Layer
           id="knockd-plan-lines-dashed"
           type="line"
+          beforeId={below}
           filter={["get", "dashed"]}
           style={{ lineColor: ["get", "colour"], lineWidth: LINE_WIDTH, lineJoin: "round", lineDasharray: [1.6, 1.2] }}
         />
@@ -63,6 +83,7 @@ function PlanLinesBase({ plan }: { plan: PlanGeo }) {
         <Layer
           id="knockd-plan-arrows"
           type="line"
+          beforeId={below}
           style={{ lineColor: ["get", "colour"], lineWidth: LINE_WIDTH, lineJoin: "round", lineCap: "round" }}
         />
       </GeoJSONSource>

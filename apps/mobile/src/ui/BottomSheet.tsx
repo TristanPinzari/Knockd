@@ -1,6 +1,14 @@
-import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radii } from "@/theme";
+import { sheetMaxHeight, useKeyboardInset } from "./keyboardInset";
 
 interface BottomSheetProps {
   children: React.ReactNode;
@@ -11,16 +19,28 @@ interface BottomSheetProps {
   onLayout?: (event: LayoutChangeEvent) => void;
 }
 
-/** Full-width sheet with top radius 28. Position it absolutely at the bottom of its parent. */
+/**
+ * Full-width sheet with top radius 28, pinned to the bottom of its parent. While the keyboard is
+ * up it sits on top of the keyboard, so text fields in it stay visible.
+ */
 export function BottomSheet({ children, style, showHandle = true, onLayout }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const keyboard = useKeyboardInset();
+  const lifted = keyboard > 0;
+  const liftStyle: ViewStyle = lifted
+    ? { bottom: keyboard, paddingBottom: KEYBOARD_GAP, maxHeight: sheetMaxHeight(height, keyboard, insets.top) }
+    : { paddingBottom: Math.max(insets.bottom, 12) + 6 };
   return (
-    <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 6 }, style]} onLayout={onLayout}>
+    <View style={[styles.sheet, style, liftStyle]} onLayout={onLayout}>
       {showHandle ? <View style={styles.handle} /> : null}
       {children}
     </View>
   );
 }
+
+/** Space between the sheet's content and the top of the keyboard. */
+const KEYBOARD_GAP = 12;
 
 const styles = StyleSheet.create({
   sheet: {

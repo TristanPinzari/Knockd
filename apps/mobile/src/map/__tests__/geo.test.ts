@@ -1,20 +1,9 @@
-import { cameraClamp, clampPoint, fitBounds, padBounds } from "../geo/bounds";
+import { clampPoint, fitBounds, padBounds } from "../geo/bounds";
 import { buildHouseLayers, houseIdOf, roundedSquare } from "../geo/houses";
 import { leadsToGeoJSON } from "../geo/leads";
-import { outskirtsPolygon } from "../geo/outskirts";
 import { styleTrails } from "../geo/trails";
 import type { MapMember, TrailCollection } from "../types";
 import { BYRON, square } from "../testing/fixtures";
-
-describe("outskirtsPolygon", () => {
-  it("is the world rectangle with the work area as a hole", () => {
-    const wa = square(-81.36, 42.94, 0.04);
-    const f = outskirtsPolygon(wa);
-    expect(f.geometry.coordinates).toHaveLength(2);
-    expect(f.geometry.coordinates[0]![0]).toEqual([-180, -85]);
-    expect(f.geometry.coordinates[1]).toEqual(wa.coordinates[0]);
-  });
-});
 
 describe("houses", () => {
   it("reads the house id from houseId, id or feature id", () => {
@@ -89,13 +78,10 @@ describe("trails", () => {
 
 describe("bounds and leads", () => {
   const wa = square(-81.36, 42.94, 0.04);
-  it("pads the clamp beyond the work area and fits tighter than the clamp", () => {
-    const c = cameraClamp(wa)!;
+  it("fits the work area with a little room around it", () => {
     const f = fitBounds(wa)!;
-    expect(c.sw[0]).toBeLessThan(-81.36);
-    expect(c.ne[1]).toBeGreaterThan(42.98);
-    expect(f.sw[0]).toBeGreaterThan(c.sw[0]);
-    expect(cameraClamp(undefined)).toBeUndefined();
+    expect(f.sw[0]).toBeLessThan(-81.36);
+    expect(f.ne[1]).toBeGreaterThan(42.98);
     expect(fitBounds(undefined)).toBeUndefined();
   });
   it("clamps points and pads by ratio", () => {

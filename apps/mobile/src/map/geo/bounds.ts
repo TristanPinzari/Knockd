@@ -9,11 +9,6 @@ export function padBounds(b: Bounds, ratio: number = BOUNDS_PADDING_RATIO): Boun
   return { sw: [b.sw[0] - dx, b.sw[1] - dy], ne: [b.ne[0] + dx, b.ne[1] + dy] };
 }
 
-/** Camera clamp: the work area plus padding, so users never pan far outside it. */
-export function cameraClamp(workArea: Polygon | undefined): Bounds | undefined {
-  return workArea ? padBounds(polygonBounds(workArea)) : undefined;
-}
-
 /** Bounds that fit the whole work area (with a little breathing room). */
 export function fitBounds(workArea: Polygon | undefined): Bounds | undefined {
   return workArea ? padBounds(polygonBounds(workArea), 0.08) : undefined;

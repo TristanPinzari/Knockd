@@ -5,13 +5,14 @@ export { DARK_MAP_COLOURS, LIGHT_MAP_COLOURS, type MapColours } from "@/theme/ma
 /** Map colours for the active theme (see src/theme/themes.ts). */
 export const COLOURS = theme.map;
 
-export const OUTSKIRTS_OPACITY = 0.12;
-/** Below this zoom the outskirts tint is fully visible; it fades out by FADE_END. */
-export const OUTSKIRTS_FADE_START = 14.5;
-export const OUTSKIRTS_FADE_END = 16;
-
 /** Byron, London ON ([lng, lat]): where the map opens before a session has an area. */
 export const BYRON: [number, number] = [-81.3425, 42.955];
+
+/**
+ * An invisible layer the themed style puts just under the first label. Lines and fills drawn with
+ * `beforeId={LABELS_ANCHOR_ID}` sit under street names instead of covering them.
+ */
+export const LABELS_ANCHOR_ID = "knockd-labels-anchor";
 
 export const MIN_ZOOM = 10;
 export const MAX_ZOOM = 19;

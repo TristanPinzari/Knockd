@@ -433,4 +433,23 @@ describe("suggestionToPlanOps", () => {
     expect(routes.map((d) => d.memberId).sort()).toEqual(option.groups.map((g) => g.memberIds[0]).sort());
     expect(after.drawings.filter((d) => d.kind === "freehand")).toHaveLength(1); // freehand lines stay
   });
+
+  it("clears the crew's claims from an earlier plan elsewhere, so the old area isn't left marked", () => {
+    const { streets, houses } = grid(2, 2);
+    const option = suggest({ streets, houses, memberIds: crew(2), start: at(1, 1) }).options[0]!;
+    const outsider = member(99);
+    const before: PlanContent = {
+      ...EMPTY_PLAN,
+      claims: [
+        { blockId: 8888, memberId: member(1), authorId: member(1) }, // the crew's old plan: cleared
+        { blockId: 7777, memberId: outsider, authorId: outsider }, // someone else's: kept
+      ],
+    };
+    const after = suggestionToPlanOps(option, before, uuid).reduce(
+      (plan, op) => applyPlanEdit(plan, op, member(1)),
+      before,
+    );
+    expect(after.claims.some((c) => c.blockId === 8888)).toBe(false);
+    expect(after.claims.some((c) => c.blockId === 7777 && c.memberId === outsider)).toBe(true);
+  });
 });
