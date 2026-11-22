@@ -27,15 +27,23 @@ export const PROCESSING = {
   workedMinSeconds: 45,
 } as const;
 
+/** Longest one session's processing may take before it's abandoned (and retried by maintenance). */
+const PROCESSING_TIMEOUT = "2min";
+
 export async function processSession(sessionId: string): Promise<void> {
   const started = Date.now();
   const P = PROCESSING;
 
-  await db.transaction(async (tx) => {
+  const done = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL statement_timeout = ${sql.raw(`'${PROCESSING_TIMEOUT}'`)}`);
+    // SKIP LOCKED: if another connection is already processing this session (another server, or a
+    // stuck connection from one that died mid-way), don't wait for it: that would stall the whole
+    // one-at-a-time queue. Maintenance retries ended sessions every 10 minutes.
     const [s] = await tx.execute<{ status: string }>(
-      sql`SELECT status FROM sessions WHERE id = ${sessionId} FOR UPDATE`,
+      sql`SELECT status FROM sessions WHERE id = ${sessionId} FOR UPDATE SKIP LOCKED`,
     );
-    if (!s || s.status === "live") return; // gone, or reopened: nothing to do
+    if (!s) return false; // gone, or being processed elsewhere
+    if (s.status === "live") return false; // reopened: nothing to do
 
     // Replace any earlier results.
     await tx.execute(sql`DELETE FROM session_street_coverage WHERE session_id = ${sessionId}`);
@@ -134,7 +142,9 @@ export async function processSession(sessionId: string): Promise<void> {
       FROM hw FULL JOIN ld ON ld.block_id = hw.block_id`);
 
     await tx.execute(sql`UPDATE sessions SET status = 'processed' WHERE id = ${sessionId}`);
+    return true;
   });
+  if (!done) return;
 
   emitToSession(sessionId, "session:processed");
   logger.info({ sessionId, ms: Date.now() - started }, "session processed");

@@ -25,8 +25,8 @@ import { useMap } from "../MapView";
 import { ago, km, pct, shortDate, Stat, ThemeToggle } from "../ui";
 import { MembersDialog } from "./MembersDialog";
 
-/** Below this zoom the map shows no team data (too many features to be useful). */
-const MIN_DATA_ZOOM = 13;
+/** Below this zoom (wider than a whole city) the map shows no team data. */
+const MIN_DATA_ZOOM = 9;
 const DAY = 86_400_000;
 
 /** The team screen: the map is the stage, with a floating panel (maps, stats, sessions) and a time slider. */
@@ -135,7 +135,7 @@ export function TeamMap() {
 
   const requestId = useRef(0);
   const loadLayers = useCallback(async () => {
-    if (!map || !current || !team) return;
+    if (!map || !team) return;
     if (map.getZoom() < MIN_DATA_ZOOM) {
       setZoomedOut(true);
       return;
@@ -146,17 +146,18 @@ export function TeamMap() {
     const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((x) => x.toFixed(5)).join(",");
     const time = asOf ? `&asOf=${new Date(asOf).toISOString()}` : "";
     setLoadingLayers(true);
+    const none: FeatureCollection = { type: "FeatureCollection", features: [] };
     try {
-      const [paths, blocks, outlines, leads, highlights, notes] = await Promise.all([
-        api<FeatureCollection>(`/v1/maps/${current.id}/paths?bbox=${bbox}${time}`),
-        api<MapBlocksRes>(`/v1/maps/${current.id}/blocks?bbox=${bbox}${time}`),
-        api<FeatureCollection>(`/v1/geo/blocks?bbox=${bbox}`),
-        api<MapLeadsRes>(`/v1/maps/${current.id}/leads?bbox=${bbox}&grades=A,B${time}`),
+      // Highlights and notes belong to the team; session data (blocks, streets, leads) to a map.
+      const [highlights, notes, paths, blocks, leads] = await Promise.all([
         api<GetHighlightsRes>(`/v1/teams/${teamId}/highlights?bbox=${bbox}`),
         api<GetTeamNotesRes>(`/v1/teams/${teamId}/notes?bbox=${bbox}`),
+        current ? api<FeatureCollection>(`/v1/maps/${current.id}/paths?bbox=${bbox}${time}`) : none,
+        current ? api<MapBlocksRes>(`/v1/maps/${current.id}/blocks?bbox=${bbox}${time}`) : { blocks: [] },
+        current ? api<MapLeadsRes>(`/v1/maps/${current.id}/leads?bbox=${bbox}&grades=A,B${time}`) : { leads: [] },
       ]);
       if (id !== requestId.current) return; // a newer request is on its way
-      setBlocks(map, outlines, blocks.blocks);
+      setBlocks(map, blocks.blocks);
       setPaths(map, paths, team.fadeDays, asOf ?? Date.now());
       setLeads(map, leads.leads);
       setHighlights(map, highlights.highlights);
@@ -554,7 +555,7 @@ export function TeamMap() {
       {(zoomedOut || loadingLayers) && (
         <div className="card float-top-right" style={{ padding: "10px 16px", borderRadius: 999 }}>
           <span className="small" style={{ fontWeight: 600 }}>
-            {zoomedOut ? "Zoom in to see the team’s map" : "Loading…"}
+            {zoomedOut ? "Zoom in to the city to see the team’s map" : "Loading…"}
           </span>
         </div>
       )}

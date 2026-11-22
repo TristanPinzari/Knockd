@@ -19,7 +19,7 @@ import type {
   UploadSessionRes,
 } from "@knockd/shared";
 import { db } from "../db/client";
-import { sessionMembers, sessions, teamInvites, teamMembers, teams, teamSessions, users } from "../db/schema";
+import { maps, sessionMembers, sessions, teamInvites, teamMembers, teams, teamSessions, users } from "../db/schema";
 import { env } from "../env";
 import { forbidden, HttpError, notFound } from "../http/errors";
 
@@ -115,6 +115,8 @@ export async function createTeam(userId: string, name: string): Promise<Team> {
   return db.transaction(async (tx) => {
     const [team] = await tx.insert(teams).values({ name, createdBy: userId }).returning();
     await tx.insert(teamMembers).values({ teamId: team!.id, userId, role: "owner" });
+    // Every team starts with a map of all its work (no boundary). More maps can be added later.
+    await tx.insert(maps).values({ teamId: team!.id, name: "World Map", createdBy: userId });
     return toTeam(team!);
   });
 }

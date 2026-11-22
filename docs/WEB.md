@@ -17,7 +17,7 @@ Map-first, like a ride app: the map fills the screen and everything else floats 
 | `/invite/:token`             | Joins the team from an invite link (after signing in, if needed), then opens its map |
 | `/teams/:teamId/maps/:mapId` | The team map. `/teams/:teamId` opens the first map                                   |
 
-On the team map, data loads for what's on screen at zoom 13 and closer. Block colours compare the blocks on screen (worst red, middle yellow, best green; grey until 15 houses are worked), because real lead rates are small (a few %) and fixed thresholds would paint everything red. Paths fade by duration × age using the team's `fadeDays`.
+On the team map, data loads for what's on screen from city-wide zoom (9) inwards: only worked blocks come back (with their outlines), so a whole-city view stays small. Block colours compare the blocks on screen (worst red, middle yellow, best green; grey until 15 houses are worked), because real lead rates are small (a few %) and fixed thresholds would paint everything red. Paths fade by duration × age using the team's `fadeDays`.
 
 ## Stack
 

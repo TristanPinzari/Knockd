@@ -109,8 +109,7 @@ const setData = (map: maplibregl.Map, id: SourceId, data: FeatureCollection) =>
  * Blocks coloured by lead rate relative to what's on screen: the weakest blocks red, the middle
  * yellow, the best green. Grey = not enough houses worked yet (the API returns rate null).
  */
-export function setBlocks(map: maplibregl.Map, outlines: FeatureCollection, stats: MapBlocksRes["blocks"]) {
-  const byId = new Map(stats.map((b) => [b.blockId, b]));
+export function setBlocks(map: maplibregl.Map, stats: MapBlocksRes["blocks"]) {
   const rates = stats.flatMap((b) => (b.rate === null ? [] : [b.rate])).sort((a, b) => a - b);
   const at = (q: number) => rates[Math.min(rates.length - 1, Math.floor(q * rates.length))] ?? 0;
   const [lo, mid, hi] = [at(0.1), at(0.5), at(0.9)];
@@ -121,11 +120,11 @@ export function setBlocks(map: maplibregl.Map, outlines: FeatureCollection, stat
       ? mix(COLOURS.bad, COLOURS.mid, clamp01((rate - lo) / (mid - lo || 1)))
       : mix(COLOURS.mid, COLOURS.good, clamp01((rate - mid) / (hi - mid || 1)));
   };
-  const features = outlines.features.flatMap((f) => {
-    const s = byId.get(Number(f.properties?.blockId));
-    if (!s) return [];
-    return [{ ...f, properties: { ...s, leads: JSON.stringify(s.leads), colour: colourOf(s.rate) } }];
-  });
+  const features: Feature[] = stats.map(({ geometry, ...s }) => ({
+    type: "Feature",
+    geometry: geometry as Geometry,
+    properties: { ...s, leads: JSON.stringify(s.leads), colour: colourOf(s.rate) },
+  }));
   setData(map, "blocks", fc(features));
 }
 
