@@ -1,10 +1,16 @@
-import { forwardRef, useMemo } from "react";
+import { forwardRef, useMemo, useState } from "react";
 import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { KnockdMap, type KnockdMapHandle } from "@/map";
 import type { PlanTap } from "@/map/types";
 import type { RouteProgressView } from "@/routes";
 import type { SuggestGeo } from "@/suggest/suggestView";
 import { blocksGeo, buildPlanGeo } from "@/plan/planGeo";
+import { pinsToGeoJSON } from "@/map/geo/pins";
+import { usePinsStore } from "@/realtime/stores/pinsStore";
+import { useSessionStore } from "@/realtime/stores/sessionStore";
+import { useSessionUi } from "@/session/uiStore";
+import { buildTeamLayersGeo } from "@/map/geo/teamLayers";
+
 import { buildWorkArea, placeLeads, useAreaStore, useAreaSync } from "@/area";
 import { BYRON } from "@/map/constants";
 import { useCrewStore, useLeadsStore, useTrailsStore } from "@/realtime";
@@ -13,6 +19,9 @@ import { useMyLocationStore } from "@/location/myLocationStore";
 import { useActiveSession } from "@/session";
 import { crewBadges, crewColours, SESSION_ZOOM, sessionCentre, toMapMembers } from "./liveMapData";
 import type { LiveMapData } from "./types";
+
+/** Stable empty value, so hiding previous leads doesn't rebuild the leads every render. */
+const NO_PAST_LEADS = {};
 
 export interface LiveMapProps {
   readonly data: LiveMapData;
@@ -29,6 +38,8 @@ export interface LiveMapProps {
   readonly routesOverride?: RouteProgressView | null;
   readonly suggest?: SuggestGeo;
   readonly houseHighlights?: Readonly<Record<string, string>>;
+  readonly onPinPress?: (clientId: string) => void;
+  readonly onMapLongPress?: (at: { lat: number; lng: number }) => void;
 }
 
 export interface LiveMapState {
@@ -65,12 +76,21 @@ function useSessionMapData(myMemberId: string | null): LiveMapData {
   const myPosition = useMemo(() => (myFix ? { lat: myFix.lat, lng: myFix.lng } : null), [myFix]);
   const members = useMemo(() => toMapMembers(crew, myMemberId, myPosition), [crew, myMemberId, myPosition]);
   const badges = useMemo(() => crewBadges(crew, myMemberId), [colours, myMemberId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const leads = useMemo(
-    () => placeLeads(leadsById, area.houses, area.pastLeads),
-    [leadsById, area.houses, area.pastLeads],
+  // The loaded team map's layers, minus the ones this person switched off.
+  const loadedLayers = useSessionStore((s) => s.loadedMap?.layers);
+  const hidden = useSessionUi((s) => s.hiddenLayers);
+  const shown = useMemo(() => new Set((loadedLayers ?? []).filter((l) => !hidden.includes(l))), [loadedLayers, hidden]);
+  const [openedAt] = useState(Date.now);
+  const team = useMemo(
+    () => buildTeamLayersGeo(area.team, area.blocks, shown, openedAt),
+    [area.team, area.blocks, shown, openedAt],
   );
+  const pastLeads = shown.has("leads") ? area.pastLeads : NO_PAST_LEADS;
+  const leads = useMemo(() => placeLeads(leadsById, area.houses, pastLeads), [leadsById, area.houses, pastLeads]);
   const planGeo = useMemo(() => buildPlanGeo(plan, area.blocks, colours), [plan, area.blocks, colours]);
   const blocks = useMemo(() => blocksGeo(area.blocks), [area.blocks]);
+  const pinsById = usePinsStore((s) => s.pins);
+  const pins = useMemo(() => pinsToGeoJSON(pinsById, colours), [pinsById, colours]);
 
   return useMemo(
     () => ({
@@ -86,8 +106,24 @@ function useSessionMapData(myMemberId: string | null): LiveMapData {
       leads,
       plan: planGeo,
       blocks,
+      pins,
+      team,
     }),
-    [centre, workArea, routes, colours, badges, members, trails, area.housesGeoJSON, leads, planGeo, blocks],
+    [
+      centre,
+      workArea,
+      routes,
+      colours,
+      badges,
+      members,
+      trails,
+      area.housesGeoJSON,
+      leads,
+      planGeo,
+      blocks,
+      pins,
+      team,
+    ],
   );
 }
 
@@ -119,6 +155,8 @@ export const LiveMap = forwardRef<KnockdMapHandle, LiveMapProps>(function LiveMa
     routesOverride,
     suggest,
     houseHighlights,
+    onPinPress,
+    onMapLongPress,
   },
   ref,
 ) {
@@ -141,6 +179,10 @@ export const LiveMap = forwardRef<KnockdMapHandle, LiveMapProps>(function LiveMa
       planBlocks={planning ? data.blocks : null}
       suggest={suggest}
       houseHighlights={houseHighlights}
+      pins={data.pins}
+      team={data.team}
+      onPinPress={onPinPress}
+      onMapLongPress={onMapLongPress}
       onHousePress={onHousePress}
       onHouseLongPress={onHouseLongPress}
       onPlanTap={planning ? onPlanTap : undefined}

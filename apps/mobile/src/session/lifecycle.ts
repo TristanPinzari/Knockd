@@ -54,6 +54,8 @@ export interface SessionLifecycle {
    */
   teardown(options?: { ended?: boolean }): Promise<void>;
   startSim(bots: number): Promise<number>;
+  /** Admin: removes someone from the session (their phone leaves it). */
+  removeMember(memberId: string): Promise<void>;
 }
 
 export const SIM_PACE = "demo" as const;
@@ -124,6 +126,10 @@ export function createSessionLifecycle(deps: LifecycleDeps): SessionLifecycle {
     end: () => exit((api, a) => api.endSession(a.sessionId, a.token), true),
     leave: () => exit((api, a) => api.leaveSession(a.sessionId, a.token)),
     teardown,
+    removeMember: async (memberId) => {
+      const active = requireActive();
+      await (await deps.getApi()).removeMember(active.sessionId, active.token, memberId);
+    },
     startSim: async (bots) => {
       const active = requireActive();
       const res = await (await deps.getApi()).startSim(active.sessionId, active.token, bots, SIM_PACE);

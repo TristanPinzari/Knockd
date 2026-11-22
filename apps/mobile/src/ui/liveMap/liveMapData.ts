@@ -1,5 +1,7 @@
 import type { MultiPolygon, Polygon } from "geojson";
-import type { LatLng, Lead, PlanContent } from "@knockd/shared";
+import type { LatLng, Lead, Pin, PlanContent } from "@knockd/shared";
+import { pinsToGeoJSON } from "@/map/geo/pins";
+import { EMPTY_TEAM_GEO } from "@/map/geo/teamLayers";
 import type { MapMember, TrailCollection } from "@/map/types";
 import type { AreaData } from "@/area/areaModel";
 import { plannedAreaCentre } from "@/area/cellPlanner";
@@ -76,6 +78,7 @@ export interface SessionMapInput {
   readonly plannedArea: Polygon | MultiPolygon | null;
   readonly plan: PlanContent | null;
   readonly leads: Readonly<Record<string, Lead>>;
+  readonly pins?: Readonly<Record<string, Pin>>;
 }
 
 /**
@@ -93,6 +96,8 @@ export function buildSessionMapData(input: SessionMapInput): LiveMapData {
     colours,
     plan: buildPlanGeo(input.plan, input.area.blocks, colours),
     blocks: blocksGeo(input.area.blocks),
+    pins: pinsToGeoJSON(input.pins ?? {}, colours),
+    team: EMPTY_TEAM_GEO,
     crew: crewBadges(input.crew, input.myMemberId),
     members: toMapMembers(input.crew, input.myMemberId),
     trails: input.trails,

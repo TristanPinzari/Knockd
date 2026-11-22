@@ -2,6 +2,8 @@ import type { FeatureCollection, Point, Polygon } from "geojson";
 import type { MapLead, MapMember, TrailCollection } from "@/map/types";
 import type { RouteProgressView } from "@/routes";
 import type { PlanGeo } from "@/plan/planGeo";
+import type { PinProps } from "@/map/geo/pins";
+import type { TeamLayersGeo } from "@/map/geo/teamLayers";
 
 /** Everything the Live map screen hands to KnockdMap (minus interaction props). */
 export interface LiveMapData {
@@ -24,6 +26,9 @@ export interface LiveMapData {
   readonly plan: PlanGeo;
   /** Every loaded block, shown (and tappable) while planning. */
   readonly blocks: FeatureCollection<Polygon, { blockId: number }>;
+  readonly pins: FeatureCollection<Point, PinProps>;
+  /** The loaded team map's layers that are switched on. */
+  readonly team: TeamLayersGeo;
 }
 
 /** The slice of a live crew member the map needs (structural, so this file stays free of native imports). */

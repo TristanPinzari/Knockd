@@ -2,7 +2,6 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { logger } from "../realtime/logger";
 import { getRuntime } from "../realtime/runtime";
-import type { ActiveSession } from "../session/activeSessionStore";
 import { colors } from "../theme";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
@@ -14,7 +13,17 @@ type Status = "adding" | "added" | "failed";
  * "Add to High Five Painting?" on End of day (README "Uploading to a team"). Needs the session to
  * have been created or joined while logged in. Adding twice is harmless (the server keeps one).
  */
-export function AddToTeam({ session }: { session: ActiveSession }) {
+export function AddToTeam({
+  session,
+  alreadyIn = [],
+  compact = false,
+}: {
+  session: { readonly sessionId: string; readonly linked?: boolean };
+  /** Teams the session is already on (shown as added). */
+  alreadyIn?: readonly string[];
+  /** Just the buttons, no heading (for the Welcome list). */
+  compact?: boolean;
+}) {
   const { available, loggedIn, me } = useAccountStore();
   const [status, setStatus] = useState<Record<string, Status>>({});
   if (!available) return null;
@@ -43,10 +52,10 @@ export function AddToTeam({ session }: { session: ActiveSession }) {
   };
 
   return (
-    <View style={styles.box}>
-      <Text variant="heading">Add to your team&apos;s map</Text>
+    <View style={compact ? styles.compactBox : styles.box}>
+      {compact ? null : <Text variant="heading">Add to your team&apos;s map</Text>}
       {me.teams.map((t) => {
-        const s = status[t.id];
+        const s = alreadyIn.includes(t.id) ? "added" : status[t.id];
         return (
           <View key={t.id} style={styles.row}>
             <Button
@@ -73,6 +82,7 @@ export function AddToTeam({ session }: { session: ActiveSession }) {
 
 const styles = StyleSheet.create({
   box: { marginTop: 20, gap: 10 },
+  compactBox: { gap: 8 },
   row: { gap: 4 },
   note: { marginTop: 16, textAlign: "center" },
 });

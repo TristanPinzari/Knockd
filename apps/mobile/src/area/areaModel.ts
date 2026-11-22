@@ -2,8 +2,8 @@
  * Pure, immutable merge of GET /area and /layers responses into one area model. Streets and blocks
  * that cross a cell edge arrive in both cells, so everything is keyed (and deduped) by id.
  */
-import type { FeatureCollection, Polygon } from "geojson";
-import type { CellId, Grade, SessionAreaRes, SessionLayersRes } from "@knockd/shared";
+import type { Feature, FeatureCollection, LineString, Polygon } from "geojson";
+import type { CellId, Grade, Highlight, SessionAreaRes, SessionLayersRes, TeamNote } from "@knockd/shared";
 import { parseBlocks, parseHouses, parseStreets, type BlockInfo, type HouseInfo, type StreetInfo } from "./features";
 
 export interface PastLeadInfo {
@@ -23,7 +23,19 @@ export interface AreaData {
   /** Every loaded house, ready for the map. A new object only when houses were added. */
   readonly housesGeoJSON: HouseCollection;
   readonly pastLeads: Readonly<Record<string, PastLeadInfo>>;
+  /** The rest of a loaded team map (GET /layers), merged across cells. */
+  readonly team: TeamLayerData;
 }
+
+export interface TeamLayerData {
+  /** Past paths, keyed so a street that spans two cells is kept once. */
+  readonly coverage: Readonly<Record<string, Feature<LineString>>>;
+  readonly leadRate: Readonly<Record<string, { readonly rate: number | null; readonly housesWorked: number }>>;
+  readonly highlights: Readonly<Record<string, Highlight>>;
+  readonly notes: Readonly<Record<string, TeamNote>>;
+}
+
+export const EMPTY_TEAM_LAYERS: TeamLayerData = { coverage: {}, leadRate: {}, highlights: {}, notes: {} };
 
 export const EMPTY_AREA: AreaData = {
   loadedCells: {},
@@ -32,6 +44,7 @@ export const EMPTY_AREA: AreaData = {
   streets: {},
   housesGeoJSON: { type: "FeatureCollection", features: [] },
   pastLeads: {},
+  team: EMPTY_TEAM_LAYERS,
 };
 
 export interface MergeResult {
@@ -83,6 +96,33 @@ export function mergeAreaCells(data: AreaData, res: SessionAreaRes): MergeResult
 }
 
 /** Keeps the latest past lead per house. */
+/** Coverage, lead rates, highlights and team notes from GET /layers, added to what we have. */
+export function mergeTeamLayers(data: AreaData, layers: SessionLayersRes): AreaData {
+  const { coverage, leadRate, highlights, notes } = layers;
+  if (!coverage?.features.length && !leadRate?.length && !highlights?.length && !notes?.length) return data;
+  const team = data.team;
+  const paths = { ...team.coverage };
+  for (const f of coverage?.features ?? []) {
+    if (f.geometry?.type !== "LineString") continue;
+    const p = f.properties ?? {};
+    paths[`${String(p.sessionId)}:${String(p.memberName)}:${String(p.streetId)}`] = f as Feature<LineString>;
+  }
+  return {
+    ...data,
+    team: {
+      coverage: paths,
+      leadRate: {
+        ...team.leadRate,
+        ...Object.fromEntries(
+          (leadRate ?? []).map((b) => [String(b.blockId), { rate: b.rate, housesWorked: b.housesWorked }]),
+        ),
+      },
+      highlights: { ...team.highlights, ...Object.fromEntries((highlights ?? []).map((h) => [h.id, h])) },
+      notes: { ...team.notes, ...Object.fromEntries((notes ?? []).map((n) => [n.id, n])) },
+    },
+  };
+}
+
 export function mergePastLeads(data: AreaData, layers: SessionLayersRes): AreaData {
   const incoming = layers.leads ?? [];
   if (incoming.length === 0) return data;

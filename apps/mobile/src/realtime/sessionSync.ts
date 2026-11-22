@@ -31,6 +31,7 @@ export function applySnapshot(snapshot: SessionSnapshotRes, myMemberId: string |
   usePlanStore.getState().setPlan(snapshot.plan, snapshot.planVersion);
   useChatStore.getState().seed(snapshot.messages, myMemberId);
   useSessionStore.getState().setStatus(snapshot.session.status);
+  useSessionStore.getState().setLoadedMap(snapshot.session.loadedMap);
 }
 
 /** One attempt. Throws on failure; stores are only touched after both requests succeed. */

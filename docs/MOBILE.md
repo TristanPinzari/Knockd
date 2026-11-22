@@ -208,7 +208,7 @@ For each page below: what it shows, and the calls it makes.
 - **Login is optional**, top right of Welcome ("Log in", or your name: tap to log out). Auth0 with the scope and audience above; the refresh token keeps you logged in. Without the `EXPO_PUBLIC_AUTH0_*` settings the app runs guest-only
 - After login, `GET /v1/me` gives your name (filled into the name fields) and teams (listed on Welcome)
 - **Create and join send the account token when logged in**, so the session is linked (`linked` on the saved session). Only linked sessions can be added to a team
-- **Create session, logged in:** "Show previous leads from a team map" lists every map on your teams. Picking one sends `loadMap` with the `leads` layer. Previous leads draw as hollow rings (today's are solid), and the house sheet says "Previous lead: A · 8 months ago". Coverage, lead-rate colours, highlights and notes aren't drawn on the phone yet, so they aren't offered
+- **Create session, logged in:** "Load a team map" lists every map on your teams; pick the layers to load (see Team progress → Built for how they draw). Previous leads draw as hollow rings (today's are solid), and the house sheet says "Previous lead: A · 8 months ago"
 - **End of day:** "Add to your team's map" with one button per team (`POST /v1/teams/:id/sessions`), or a short note saying why not (logged out, joined as a guest, or no team yet)
 - Code: `src/account/` (`AccountProvider.tsx`: Auth0 and loading your teams; `accountStore.ts`: what screens read, plus `getAccountToken()`; `AccountBar`, `useTeamMaps`, `AddToTeam`)
 - **Needs a new development build** (Auth0 is native code). The callback URLs for `rodeo.knockd.app` are already set in Auth0
@@ -263,6 +263,15 @@ Don't use double-tap: that zooms the map.
 ### Team progress
 
 `GET /v1/sessions/:id/stats`: leads per person by grade (the leaderboard), plus streets worked, blocks completed and houses covered. Refresh when the screen opens and after each `lead:new`. Distances are estimates until the session is processed.
+
+**Built**, with the other live map features that weren't numbered steps:
+
+- **Team progress** (trophy button): crew tiles (houses, streets worked, blocks done) and the leaderboard: rank, A/B/C per person, houses each, you highlighted. Leads are live; coverage refreshes every 30 s. A "Sam passed you · You're now 2nd in leads. 2 leads to take it back." banner (from Jasmine's overtake detector) opens it. Code: `src/ui/progress/`, `src/session/teamProgress.ts`
+- **Chat** (chat button with an unread count): messages in each sender's colour, yours on the right, sent through the offline queue. Code: `src/ui/chat/ChatSheet.tsx`
+- **Pins:** long-press empty map (not a house) to drop one, with an optional label and quick picks ("Meet up here once done"). Tap a pin to see who dropped it and when, and remove it (anyone can). Code: `src/ui/live/PinSheet.tsx`, `src/map/layers/PinLayers.tsx`
+- **Removing people:** the admin's lobby has Remove on everyone else. The removed phone leaves the session and says so. The live menu's "Crew and join code" opens the lobby again
+- **Adding a session later:** logged in, Welcome lists up to 3 ended sessions from the last 7 days that aren't on all your teams' maps yet, with Add buttons (`GET /v1/me/sessions`). Code: `src/account/RecentSessions.tsx`
+- **All team map layers:** Create session offers previous leads (on by default), past coverage, lead-rate colours, highlights and team notes. They draw like the website (coverage fades by duration × age over 120 days; blocks are coloured against each other). Each person switches layers on or off for themselves in the menu's "Team map" card. Code: `src/map/geo/teamLayers.ts`, `src/map/layers/TeamLayers.tsx`, `src/session/TeamLayersCard.tsx`
 
 ### End of day
 

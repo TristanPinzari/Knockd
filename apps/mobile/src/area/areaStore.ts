@@ -5,7 +5,7 @@
 import { create } from "zustand";
 import type { MultiPolygon, Polygon } from "geojson";
 import type { CellId, LatLng, PlanContent, SessionAreaRes, SessionLayersRes, SessionStatsRes } from "@knockd/shared";
-import { EMPTY_AREA, mergeAreaCells, mergePastLeads, type AreaData } from "./areaModel";
+import { EMPTY_AREA, mergeAreaCells, mergePastLeads, mergeTeamLayers, type AreaData } from "./areaModel";
 import { plannedAreaCentre } from "./cellPlanner";
 import { growRadiusM, MIN_AREA_RADIUS_M } from "./workingArea";
 
@@ -104,7 +104,8 @@ export const useAreaStore = create<AreaState>()((set, get) => {
         failedAt: { ...s.failedAt, ...Object.fromEntries(cells.map((c) => [c, nowMs])) },
         error: message,
       })),
-    setLayers: (sessionId, layers) => forSession(sessionId, (s) => ({ area: mergePastLeads(s.area, layers) })),
+    setLayers: (sessionId, layers) =>
+      forSession(sessionId, (s) => ({ area: mergeTeamLayers(mergePastLeads(s.area, layers), layers) })),
     setPlannedArea: (sessionId, plannedArea) => forSession(sessionId, () => ({ plannedArea })),
     growArea: (sessionId, points) =>
       forSession(sessionId, (s) => {
