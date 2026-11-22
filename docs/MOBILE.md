@@ -28,3 +28,20 @@ None of these are secret (they ship inside the app), but keep `.env` out of git 
   4. Mark every spot where a route turns back on itself (dead ends, one side then the other) with a clear U-turn badge
   5. To swap people between groups, swap `memberIds` (and the `memberId`s in `knocks`) in the option. When one is picked, send every op from `suggestionToPlanOps(option, plan, uuid)` with `plan:edit`, in order
 - API reference: [API.md](API.md). Request/response types: `@knockd/shared`
+
+## Running the app
+
+The map needs native code, so use a development build (not Expo Go):
+
+```
+cp apps/mobile/.env.example apps/mobile/.env
+pnpm install
+pnpm -F @knockd/mobile ios        # or: android (first run builds the dev client)
+pnpm -F @knockd/mobile start      # later runs: Metro for the dev client
+```
+
+Checks: `pnpm -F @knockd/mobile typecheck`, `lint`, `test` (jest-expo for UI/mock/map, vitest for location/realtime/trails).
+
+Screens live in `apps/mobile/app` (expo-router) and use mock data from `src/mock`. The map, realtime and location modules are
+reached only through `src/ui/slots.ts`; today it points at placeholders in `src/ui/placeholders`. Live-map variants can be previewed
+with `/session?scenario=offline|lead|passed`.
