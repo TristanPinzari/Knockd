@@ -32,7 +32,7 @@ function useEndedWatcher(active: ActiveSession | null): void {
   const status = useSessionStore((s) => s.status);
   useEffect(() => {
     if (!active || status === "live") return;
-    void sessionLifecycle.teardown().then(() => router.replace("/end"));
+    void sessionLifecycle.teardown({ ended: true }).then(() => router.replace("/end"));
   }, [active, status]);
 }
 
