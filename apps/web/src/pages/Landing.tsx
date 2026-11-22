@@ -1,7 +1,7 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect } from "react";
 import { MapView } from "../MapView";
-import { ThemeToggle } from "../ui";
+import { ThemeToggle, Logo } from "../ui";
 
 /** Auth0 adds these to the address when it sends you back; they're single-use. */
 const AUTH_PARAMS = ["code", "state", "error", "error_description"];
@@ -34,8 +34,8 @@ export function Landing() {
         <ThemeToggle />
       </div>
       <div className="card" style={{ position: "absolute", left: 24, bottom: 24, maxWidth: 460, padding: 32 }}>
-        <div className="logo" style={{ marginBottom: 20 }}>
-          knock<span>d</span>
+        <div style={{ marginBottom: 20 }}>
+          <Logo />
         </div>
         <h1>See every door your team has knocked.</h1>
         <p className="muted" style={{ margin: "14px 0 24px", fontSize: 17, lineHeight: 1.45 }}>

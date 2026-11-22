@@ -234,7 +234,7 @@ export function TeamMap() {
   // A pin where the note will go.
   useEffect(() => {
     if (!map || !noteAt) return;
-    const marker = new maplibregl.Marker({ color: "#e8007f" }).setLngLat([noteAt.lng, noteAt.lat]).addTo(map);
+    const marker = new maplibregl.Marker({ color: COLOURS.leadA }).setLngLat([noteAt.lng, noteAt.lat]).addTo(map);
     return () => {
       marker.remove();
     };

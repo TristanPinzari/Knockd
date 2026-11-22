@@ -6,7 +6,7 @@ The website at **https://knockd.rodeo**: team maps, stats, highlights and notes,
 
 ## Look
 
-Map-first, like a ride app: the map fills the screen and everything else floats on it in white cards with big rounded corners, bold Inter type, pill buttons and one pink accent (`--accent` in [src/styles.css](../apps/web/src/styles.css), where all the design tokens live). On phones the side panel becomes a bottom sheet. **Dark mode** follows the computer's setting until you click the moon/sun button, which flips light and dark (remembered in the browser). The dark map comes from `/tiles/style-dark.json`, and the map layers switch to light lines on the dark basemap ([src/theme.ts](../apps/web/src/theme.ts), `themed()` in [src/map/layers.ts](../apps/web/src/map/layers.ts)).
+Map-first, like a ride app: the map fills the screen and everything else floats on it in white cards with big rounded corners, pill buttons and chips. **It matches the phone app** ([apps/mobile/src/theme](../apps/mobile/src/theme)): Figtree in regular and medium, slate greys, the map-pin logo, and one red-orange accent (a softer orange in dark mode). The design tokens live at the top of [src/styles.css](../apps/web/src/styles.css); change them together with the phone's. On phones the side panel becomes a bottom sheet. **Dark mode** follows the computer's setting until you click the moon/sun button, which flips light and dark (remembered in the browser). The dark map comes from `/tiles/style-dark.json`, and the map layers switch to light lines on the dark basemap ([src/theme.ts](../apps/web/src/theme.ts), `themed()` in [src/map/layers.ts](../apps/web/src/map/layers.ts)).
 
 ## Screens
 

@@ -7,15 +7,16 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import type { Theme } from "../theme";
 
+/** The same colours as the phone (apps/mobile/src/theme and src/map/geo/teamLayers.ts). */
 export const COLOURS = {
-  good: "#12a150",
-  mid: "#f2c037",
-  bad: "#e5484d",
-  none: "#b9b8c3",
-  path: "#2b2a3a",
-  leadA: "#e8007f",
-  leadB: "#7c4dff",
-  note: "#15141f",
+  good: "#22c55e",
+  mid: "#facc15",
+  bad: "#ef4444",
+  none: "#9aa3ad",
+  path: "#1f2328",
+  leadA: "#e2381f",
+  leadB: "#7c4ddb",
+  note: "#111418",
 };
 
 const empty: FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -25,7 +26,7 @@ type SourceId = (typeof SOURCES)[number];
 /** Colours that change with the basemap: dark lines on the light map, light lines on the dark one. */
 const themed = (theme: Theme) =>
   theme === "dark"
-    ? { path: "#f3f2f8", ring: "#1b1a22", noteFill: "#1b1a22", noteStroke: "#f3f2f8", blockOpacity: 0.45 }
+    ? { path: "#e9edf3", ring: "#1b2330", noteFill: "#1b2330", noteStroke: "#e9edf3", blockOpacity: 0.45 }
     : { path: COLOURS.path, ring: "#ffffff", noteFill: "#ffffff", noteStroke: COLOURS.note, blockOpacity: 0.38 };
 
 /** Adds the sources and layers (empty); `set*` functions below fill them. Re-run after the basemap reloads. */
