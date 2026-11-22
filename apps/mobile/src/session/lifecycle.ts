@@ -2,7 +2,7 @@
  * Create / join / end / leave, as plain async functions over injected dependencies so the flow is
  * unit-testable. The app uses `sessionLifecycle` (bound to the real runtime, see defaultDeps.ts).
  */
-import type { JoinSessionBody, SessionAccessRes, SessionAreaInput, LatLng } from "@knockd/shared";
+import type { CreateSessionBody, JoinSessionBody, SessionAccessRes, SessionAreaInput, LatLng } from "@knockd/shared";
 import type { ApiClient } from "../realtime/api";
 import { logger } from "../realtime/logger";
 import { useActiveSession, type ActiveSession } from "./activeSessionStore";
@@ -25,10 +25,13 @@ export interface CreateInput {
   displayName: string;
   location: LatLng;
   area: SessionAreaInput;
+  /** Account only: a team map whose data (e.g. previous leads) loads into the session. */
+  loadMap?: CreateSessionBody["loadMap"];
 }
 
-export function toActiveSession(res: SessionAccessRes): ActiveSession {
+export function toActiveSession(res: SessionAccessRes, linked = false): ActiveSession {
   return {
+    ...(linked ? { linked } : {}),
     sessionId: res.session.id,
     token: res.token,
     memberId: res.member.id,
@@ -39,8 +42,9 @@ export function toActiveSession(res: SessionAccessRes): ActiveSession {
 }
 
 export interface SessionLifecycle {
-  create(input: CreateInput): Promise<ActiveSession>;
-  join(body: JoinSessionBody): Promise<ActiveSession>;
+  /** `accountToken`: when logged in, links the session (and your member) to your account. */
+  create(input: CreateInput, accountToken?: string | null): Promise<ActiveSession>;
+  join(body: JoinSessionBody, accountToken?: string | null): Promise<ActiveSession>;
   /** Admin: ends the session for everyone. */
   end(): Promise<void>;
   leave(): Promise<void>;
@@ -55,8 +59,8 @@ export interface SessionLifecycle {
 export const SIM_PACE = "demo" as const;
 
 export function createSessionLifecycle(deps: LifecycleDeps): SessionLifecycle {
-  const activate = (res: SessionAccessRes): ActiveSession => {
-    const active = toActiveSession(res);
+  const activate = (res: SessionAccessRes, linked: boolean): ActiveSession => {
+    const active = toActiveSession(res, linked);
     useActiveSession.getState().setActive(active);
     return active;
   };
@@ -113,8 +117,10 @@ export function createSessionLifecycle(deps: LifecycleDeps): SessionLifecycle {
   };
 
   return {
-    create: async (input) => activate(await (await deps.getApi()).createSession(input)),
-    join: async (body) => activate(await (await deps.getApi()).joinSession(body)),
+    create: async (input, accountToken) =>
+      activate(await (await deps.getApi()).createSession(input, accountToken), !!accountToken),
+    join: async (body, accountToken) =>
+      activate(await (await deps.getApi()).joinSession(body, accountToken), !!accountToken),
     end: () => exit((api, a) => api.endSession(a.sessionId, a.token), true),
     leave: () => exit((api, a) => api.leaveSession(a.sessionId, a.token)),
     teardown,

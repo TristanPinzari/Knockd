@@ -19,3 +19,14 @@ export const ordinal = (n: number): string => {
 
 export const stepValue = (value: number, delta: number, min: number, max: number): number =>
   clamp(Math.round((value + delta) * 100) / 100, min, max);
+
+/** "today", "3 days ago", "2 weeks ago", "8 months ago", "1 year ago". */
+export function agoLabel(iso: string, nowMs: number): string {
+  const days = Math.floor((nowMs - Date.parse(iso)) / 86_400_000);
+  const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"} ago`;
+  if (!Number.isFinite(days) || days < 1) return "today";
+  if (days < 14) return plural(days, "day");
+  if (days < 60) return plural(Math.floor(days / 7), "week");
+  if (days < 365) return plural(Math.floor(days / 30), "month");
+  return plural(Math.floor(days / 365), "year");
+}

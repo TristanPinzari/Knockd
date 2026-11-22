@@ -68,7 +68,7 @@ describe("create / join", () => {
     const joinSession = jest.fn(async () => access(ME, HOST));
     const { lifecycle } = setup({ joinSession });
     await lifecycle.join({ code: "KNK482", displayName: "Sam" });
-    expect(joinSession).toHaveBeenCalledWith({ code: "KNK482", displayName: "Sam" });
+    expect(joinSession).toHaveBeenCalledWith({ code: "KNK482", displayName: "Sam" }, undefined); // guest: no account token
     expect(useActiveSession.getState().active?.memberId).toBe(ME);
   });
 

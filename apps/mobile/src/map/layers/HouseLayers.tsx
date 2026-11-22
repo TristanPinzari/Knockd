@@ -10,7 +10,10 @@ interface Props {
   leads: FeatureCollection<Point>;
 }
 
-/** Houses (white, or filled in the knocker's colour when planned) with grey outline, brand lead dots, and an invisible hit-test layer. */
+/**
+ * Houses (white, or filled in the knocker's colour when planned) with grey outline, lead dots (solid
+ * for today, hollow for previous leads from a team map), and an invisible hit-test layer.
+ */
 function HouseLayersBase({ houses, leads }: Props) {
   return (
     <>
@@ -46,9 +49,10 @@ function HouseLayersBase({ houses, leads }: Props) {
           type="circle"
           style={{
             circleRadius: GRADE_RADIUS,
-            circleColor: COLOURS.brand,
-            circleStrokeColor: COLOURS.white,
-            circleStrokeWidth: 1.5,
+            // Today's leads are solid; previous ones (from a loaded team map) are hollow rings.
+            circleColor: ["case", ["get", "past"], COLOURS.white, COLOURS.brand],
+            circleStrokeColor: ["case", ["get", "past"], COLOURS.brand, COLOURS.white],
+            circleStrokeWidth: ["case", ["get", "past"], 2, 1.5],
           }}
         />
       </GeoJSONSource>

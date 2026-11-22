@@ -14,6 +14,8 @@ export interface ActiveSession {
   joinCode: string;
   isAdmin: boolean;
   displayName: string;
+  /** Created or joined while logged in, so it can be added to a team afterwards. */
+  linked?: boolean;
 }
 
 export interface ActiveSessionState {
@@ -39,6 +41,7 @@ const StoredSession = z.object({
   joinCode: z.string(),
   isAdmin: z.boolean(),
   displayName: z.string(),
+  linked: z.boolean().optional(),
 });
 
 export function parseStoredSession(raw: string | null): ActiveSession | null {

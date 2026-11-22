@@ -2,6 +2,8 @@ import { Redirect, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AccountBar, TeamsLine } from "@/account/AccountBar";
+import { getAccountToken, useAccountStore } from "@/account/accountStore";
 import { sessionErrorMessage, useActiveSession } from "@/session";
 import { sessionLifecycle } from "@/session/defaultDeps";
 import { colors, FONT_REGULAR, radii } from "@/theme";
@@ -16,7 +18,8 @@ const sanitize = (raw: string): string =>
 
 /**
  * Welcome (MOBILE.md screen 1): join a session with a code and just a name, or start one.
- * Reopening the app during a session goes straight back to the Live map. Login comes with accounts.
+ * Reopening the app during a session goes straight back to the Live map. Logging in (top right) is
+ * optional: it links sessions to your account so they can be added to your team.
  */
 export default function WelcomeScreen() {
   const active = useActiveSession((s) => s.active);
@@ -24,7 +27,10 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const [code, setCode] = useState("");
-  const [name, setName] = useState("");
+  // Your account name until you type your own.
+  const accountName = useAccountStore((s) => s.me?.user.displayName ?? "");
+  const [typedName, setName] = useState<string | null>(null);
+  const name = typedName ?? accountName;
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canJoin = code.length === CODE_LENGTH && name.trim().length > 0 && !joining;
@@ -33,7 +39,7 @@ export default function WelcomeScreen() {
     setJoining(true);
     setError(null);
     try {
-      await sessionLifecycle.join({ code, displayName: name.trim() });
+      await sessionLifecycle.join({ code, displayName: name.trim() }, await getAccountToken());
       router.replace("/lobby");
     } catch (cause) {
       setError(sessionErrorMessage("join", cause));
@@ -48,7 +54,10 @@ export default function WelcomeScreen() {
     <Screen padTop style={styles.screen}>
       <View style={[styles.brand, { marginTop: 24 }]}>
         <Icon name="map-pin" size={24} color={colors.brand} />
-        <Text variant="title">Knockd</Text>
+        <Text variant="title" style={{ flex: 1 }}>
+          Knockd
+        </Text>
+        <AccountBar />
       </View>
       <View style={styles.hero}>
         <Text variant="title" style={styles.headline}>
@@ -57,6 +66,7 @@ export default function WelcomeScreen() {
         <Text variant="body" color={colors.ink.secondary}>
           Join your crew on one live map, mark houses as you walk, and see who covers what.
         </Text>
+        <TeamsLine />
       </View>
 
       <Text variant="label" color={colors.ink.secondary} style={styles.label}>

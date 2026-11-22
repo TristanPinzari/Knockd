@@ -6,6 +6,7 @@ import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AccountProvider } from "@/account/AccountProvider";
 import { registerLocationTask } from "@/location";
 import { hydrateActiveSession, useActiveSession } from "@/session";
 import { SessionProvider } from "@/session/SessionProvider";
@@ -30,10 +31,12 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <SessionProvider>
-          <StatusBar style={isDark ? "light" : "dark"} />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg.page } }} />
-        </SessionProvider>
+        <AccountProvider>
+          <SessionProvider>
+            <StatusBar style={isDark ? "light" : "dark"} />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg.page } }} />
+          </SessionProvider>
+        </AccountProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

@@ -203,6 +203,16 @@ For each page below: what it shows, and the calls it makes.
 4. `POST /v1/sessions` with `{ displayName, location, area: { kind: "circle", center: location, radiusM: 400 }, loadMap? }`, plus the account token if logged in
 5. Save `{ session, member, token }` from the response → Lobby
 
+**Accounts, built** (step 9):
+
+- **Login is optional**, top right of Welcome ("Log in", or your name: tap to log out). Auth0 with the scope and audience above; the refresh token keeps you logged in. Without the `EXPO_PUBLIC_AUTH0_*` settings the app runs guest-only
+- After login, `GET /v1/me` gives your name (filled into the name fields) and teams (listed on Welcome)
+- **Create and join send the account token when logged in**, so the session is linked (`linked` on the saved session). Only linked sessions can be added to a team
+- **Create session, logged in:** "Show previous leads from a team map" lists every map on your teams. Picking one sends `loadMap` with the `leads` layer. Previous leads draw as hollow rings (today's are solid), and the house sheet says "Previous lead: A · 8 months ago". Coverage, lead-rate colours, highlights and notes aren't drawn on the phone yet, so they aren't offered
+- **End of day:** "Add to your team's map" with one button per team (`POST /v1/teams/:id/sessions`), or a short note saying why not (logged out, joined as a guest, or no team yet)
+- Code: `src/account/` (`AccountProvider.tsx`: Auth0 and loading your teams; `accountStore.ts`: what screens read, plus `getAccountToken()`; `AccountBar`, `useTeamMaps`, `AddToTeam`)
+- **Needs a new development build** (Auth0 is native code). The callback URLs for `rodeo.knockd.app` are already set in Auth0
+
 ### Join
 
 - Code (6 characters: digits and capital letters, no 0/O/1/I/L) and a name → `POST /v1/sessions/join` (with the account token if logged in)

@@ -1,12 +1,14 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { getAccountToken, useAccountStore } from "@/account/accountStore";
+import { useTeamMaps } from "@/account/useTeamMaps";
 import { startingArea } from "@/area/workingArea";
 import { sessionErrorMessage } from "@/session";
 import { getCurrentLatLng } from "@/session/currentLocation";
 import { sessionLifecycle } from "@/session/defaultDeps";
 import { colors, FONT_REGULAR, radii } from "@/theme";
-import { Button, FlatHeader, Screen, Text } from "@/ui";
+import { Button, Chip, FlatHeader, Screen, Text } from "@/ui";
 
 const NAME_MAX = 40;
 const NO_LOCATION =
@@ -14,11 +16,16 @@ const NO_LOCATION =
 
 /**
  * Create session (MOBILE.md screen 3): just your name. The session's area is set from where you're
- * standing and grows on its own as the crew spreads out, so there's nothing to pick.
+ * standing and grows on its own as the crew spreads out, so there's nothing to pick. Logged in, you
+ * can also load one of your team's maps: its previous leads show on everyone's map in the session.
  */
 export default function CreateSessionScreen() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const accountName = useAccountStore((s) => s.me?.user.displayName ?? "");
+  const [typedName, setName] = useState<string | null>(null);
+  const name = typedName ?? accountName;
+  const { maps } = useTeamMaps();
+  const [mapId, setMapId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +40,15 @@ export default function CreateSessionScreen() {
         setError(NO_LOCATION);
         return;
       }
-      await sessionLifecycle.create({ displayName: name.trim(), ...startingArea(here) });
+      await sessionLifecycle.create(
+        {
+          displayName: name.trim(),
+          ...startingArea(here),
+          // Previous leads only for now: the other team layers aren't drawn on the phone yet.
+          ...(mapId ? { loadMap: { mapId, layers: ["leads" as const] } } : {}),
+        },
+        await getAccountToken(),
+      );
       router.replace("/lobby");
     } catch (cause) {
       setError(sessionErrorMessage("create", cause));
@@ -64,6 +79,27 @@ export default function CreateSessionScreen() {
         <Text variant="caption" color={colors.ink.secondary}>
           You&apos;ll get a code to share with your crew.
         </Text>
+        {maps.length > 0 ? (
+          <View style={styles.maps}>
+            <Text variant="label" color={colors.ink.secondary}>
+              Show previous leads from a team map (optional)
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+              <Chip label="None" selected={mapId === null} onPress={() => setMapId(null)} />
+              {maps.map((m) => (
+                <Chip
+                  key={m.mapId}
+                  label={maps.some((o) => o.teamName !== m.teamName) ? `${m.name} · ${m.teamName}` : m.name}
+                  selected={mapId === m.mapId}
+                  onPress={() => setMapId(m.mapId)}
+                />
+              ))}
+            </ScrollView>
+            <Text variant="caption" color={colors.ink.muted}>
+              Everyone in the session sees them, with how long ago.
+            </Text>
+          </View>
+        ) : null}
         {error ? (
           <Text variant="label" color={colors.brand} accessibilityRole="alert" style={{ marginTop: 12 }}>
             {error}
@@ -82,6 +118,8 @@ export default function CreateSessionScreen() {
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: 24, paddingTop: 24 },
+  maps: { marginTop: 20, gap: 8 },
+  chips: { gap: 8 },
   input: {
     height: 48,
     borderRadius: radii.row,
