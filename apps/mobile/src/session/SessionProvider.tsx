@@ -7,6 +7,7 @@ import { router } from "expo-router";
 import { useEffect, type ReactNode } from "react";
 import { startTracking } from "../location";
 import { useMyLocationStore } from "../location/myLocationStore";
+import { useOfflineArea } from "../map/useOfflineArea";
 import { logger } from "../realtime/logger";
 import { useCrewStore } from "../realtime/stores/crewStore";
 import { useSessionStore } from "../realtime/stores/sessionStore";
@@ -18,13 +19,15 @@ import { sessionLifecycle } from "./defaultDeps";
 function useTracking(active: ActiveSession | null): void {
   const sessionId = active?.sessionId ?? null;
   const token = active?.token ?? null;
+  const mode = useSessionUi((s) => (s.batterySaver ? "saver" : "standard"));
+  // Restarts tracking (cleanly) when battery saver is switched.
   useEffect(() => {
     if (!sessionId || !token) return;
-    startTracking(sessionId, token, "standard").catch((error: unknown) => {
+    startTracking(sessionId, token, mode).catch((error: unknown) => {
       logger.error("session: could not start tracking", error);
       useMyLocationStore.getState().setError("Could not start tracking");
     });
-  }, [sessionId, token]);
+  }, [sessionId, token, mode]);
 }
 
 /** Members' phones learn the session ended from the socket: clean up and show the summary. */
@@ -46,6 +49,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     useSessionUi.getState().setSessionLive(true);
   }, [memberId]);
   useTracking(active);
+  useOfflineArea(active?.sessionId ?? null);
   useEndedWatcher(active);
 
   return <>{children}</>;
