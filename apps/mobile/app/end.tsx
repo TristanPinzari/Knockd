@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { AddToTeam } from "@/account/AddToTeam";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import type { Stats } from "@knockd/shared";
 import { activeLabel, distanceLabel, leadsLabel, personRows, totalLeads, type PersonStats } from "@/session/endOfDay";
@@ -10,7 +11,7 @@ import { initialsOf } from "@/ui/format";
 
 /**
  * End of day (MOBILE.md screen 10): plain stats for the crew and each person, once the server has
- * processed the session. Adding the session to a team comes with accounts (build step 9).
+ * processed the session, and "Add to your team's map" for people who were logged in.
  */
 export default function EndOfDayScreen() {
   const router = useRouter();
@@ -71,6 +72,7 @@ export default function EndOfDayScreen() {
             {personRows(state.stats, state.members, finished.memberId).map((p) => (
               <PersonRow key={p.memberId} person={p} />
             ))}
+            <AddToTeam session={finished} />
           </>
         )}
       </ScrollView>

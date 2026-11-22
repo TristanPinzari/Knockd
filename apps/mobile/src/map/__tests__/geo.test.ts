@@ -106,7 +106,7 @@ describe("bounds and leads", () => {
   it("maps leads to points", () => {
     const d = leadsToGeoJSON([{ id: "l1", lng: 1, lat: 2, grade: "A" }]);
     expect(d.features[0]!.geometry.coordinates).toEqual([1, 2]);
-    expect(d.features[0]!.properties).toEqual({ id: "l1", grade: "A" });
+    expect(d.features[0]!.properties).toEqual({ id: "l1", grade: "A", past: false });
   });
 });
 

@@ -24,6 +24,8 @@ export interface MapLead {
   lng: number;
   lat: number;
   grade: LeadGrade;
+  /** From a loaded team map (an earlier session), not today. */
+  past?: boolean;
 }
 
 export type TrailCollection = FeatureCollection<LineString, { memberId: string; mode: TrailMode }>;

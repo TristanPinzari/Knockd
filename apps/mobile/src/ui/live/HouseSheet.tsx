@@ -6,6 +6,7 @@ import { BottomSheet } from "../BottomSheet";
 import { Button } from "../Button";
 import { Icon } from "../Icon";
 import { Text } from "../Text";
+import { agoLabel } from "../format";
 import { GRADE_OPTIONS } from "./grades";
 
 /** How long Undo stays on screen after marking a lead. */
@@ -16,6 +17,8 @@ export interface HouseSheetProps {
   readonly lead: Lead | null;
   /** Who marked it, when it's a teammate's lead. */
   readonly markedBy: string | null;
+  /** A lead on this house from an earlier session (a loaded team map), if any. */
+  readonly previous?: { readonly grade: Grade; readonly at: string } | null;
   readonly onGrade: (grade: Grade) => void;
   readonly onUndo: () => void;
   readonly onSaveNote: (note: string) => void;
@@ -26,7 +29,8 @@ export interface HouseSheetProps {
  * House sheet (MOBILE.md screen 8, long-press a house): grade a lead A/B/C, undo it for a few
  * seconds, and add a short note. Everything else is assumed no lead.
  */
-export function HouseSheet({ lead, markedBy, onGrade, onUndo, onSaveNote, onClose }: HouseSheetProps) {
+export function HouseSheet({ lead, markedBy, previous, onGrade, onUndo, onSaveNote, onClose }: HouseSheetProps) {
+  const [now] = useState(Date.now);
   const [note, setNote] = useState(lead?.note ?? "");
   const [undoVisible, setUndoVisible] = useState(false);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,6 +60,11 @@ export function HouseSheet({ lead, markedBy, onGrade, onUndo, onSaveNote, onClos
             <Text variant="label" color={colors.ink.secondary}>
               {markedBy ? `Marked by ${markedBy}` : lead ? "Marked by you" : "No lead yet: pick a grade"}
             </Text>
+            {previous ? (
+              <Text variant="label" color={colors.ink.muted}>
+                Previous lead: {previous.grade} · {agoLabel(previous.at, now)}
+              </Text>
+            ) : null}
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
             <Icon name="x" size={20} color={colors.ink.primary} />

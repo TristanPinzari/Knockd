@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Vibration, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Grade, Lead } from "@knockd/shared";
+import { useAreaStore } from "@/area";
 import { useMyLocation } from "@/location";
 import { BYRON, type KnockdMapHandle } from "@/map";
 import { logger } from "@/realtime/logger";
@@ -299,6 +300,7 @@ export default function LiveMapScreen() {
           key={houseId}
           lead={lead}
           markedBy={markedBy}
+          previous={useAreaStore.getState().area.pastLeads[houseId] ?? null}
           onGrade={onGrade}
           onUndo={() => lead && run("undo the lead", sessionActions.undoLead(lead.clientId))}
           onSaveNote={(note) =>

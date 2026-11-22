@@ -7,6 +7,8 @@ import {
   ApiError,
   CreateSessionRes,
   DoorTimeRes,
+  GetMapsRes,
+  GetMeRes,
   GetMessagesRes,
   JoinSessionRes,
   PostLeadRes,
@@ -17,9 +19,13 @@ import {
   SessionStatsRes,
   StartSimRes,
   TrailsRes,
+  UploadSessionRes,
   type CreateSessionBody,
   type CreateSessionRes as CreateSessionResT,
   type DoorTimeRes as DoorTimeResT,
+  type GetMapsRes as GetMapsResT,
+  type GetMeRes as GetMeResT,
+  type UploadSessionRes as UploadSessionResT,
   type JoinSessionBody,
   type JoinSessionRes as JoinSessionResT,
   type SimPace,
@@ -85,6 +91,13 @@ export interface ApiClient {
   getDoorTime(sessionId: string, token: string): Promise<DoorTimeResT>;
   /** Leaderboard during the session; end-of-day stats once it has been processed. */
   getStats(sessionId: string, token: string): Promise<SessionStatsResT>;
+
+  // ---------- Account calls: these take the Auth0 account token, not a session token ----------
+  /** Your profile and teams (creates your user on the first call). */
+  getMe(accountToken: string): Promise<GetMeResT>;
+  getTeamMaps(teamId: string, accountToken: string): Promise<GetMapsResT>;
+  /** Adds an ended session you were in (while logged in) to one of your teams. Twice is harmless. */
+  uploadSession(teamId: string, sessionId: string, accountToken: string): Promise<UploadSessionResT>;
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -195,5 +208,21 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       request({ method: "GET", path: `${base(sessionId)}/door-time`, token, schema: DoorTimeRes }),
     getStats: (sessionId, token) =>
       request({ method: "GET", path: `${base(sessionId)}/stats`, token, schema: SessionStatsRes }),
+    getMe: (accountToken) => request({ method: "GET", path: "/v1/me", token: accountToken, schema: GetMeRes }),
+    getTeamMaps: (teamId, accountToken) =>
+      request({
+        method: "GET",
+        path: `/v1/teams/${encodeURIComponent(teamId)}/maps`,
+        token: accountToken,
+        schema: GetMapsRes,
+      }),
+    uploadSession: (teamId, sessionId, accountToken) =>
+      request({
+        method: "POST",
+        path: `/v1/teams/${encodeURIComponent(teamId)}/sessions`,
+        token: accountToken,
+        body: { sessionId },
+        schema: UploadSessionRes,
+      }),
   };
 }
