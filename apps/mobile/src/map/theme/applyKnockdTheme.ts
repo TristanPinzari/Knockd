@@ -1,4 +1,4 @@
-import { COLOURS } from "../constants";
+import { COLOURS, LABELS_ANCHOR_ID } from "../constants";
 
 /** Minimal structural types for a MapLibre style (we only touch what we recolour). */
 export interface StyleLayer {
@@ -85,7 +85,16 @@ export function themeLayer(l: StyleLayer): StyleLayer {
   }
 }
 
-/** Recolour a server (Protomaps "light") style to the Knockd look for the current scheme. Does not mutate the input. */
+/** An invisible layer under the first label: app layers drawn before it sit beneath street names. */
+const LABELS_ANCHOR: StyleLayer = { id: LABELS_ANCHOR_ID, type: "background", layout: { visibility: "none" } };
+
+/**
+ * Recolour a server (Protomaps "light") style to the Knockd look for the current scheme, and add
+ * the labels anchor (see LABELS_ANCHOR_ID). Does not mutate the input.
+ */
 export function applyKnockdTheme<T extends MapStyle>(style: T): T {
-  return { ...style, layers: style.layers.map(themeLayer) };
+  const layers = style.layers.map(themeLayer);
+  const firstLabel = layers.findIndex((l) => l.type === "symbol");
+  const at = firstLabel < 0 ? layers.length : firstLabel;
+  return { ...style, layers: [...layers.slice(0, at), LABELS_ANCHOR, ...layers.slice(at)] };
 }

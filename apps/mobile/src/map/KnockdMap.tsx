@@ -8,8 +8,8 @@ import {
 } from "@maplibre/maplibre-react-native";
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from "react";
 import type { NativeSyntheticEvent } from "react-native";
-import { HOUSES_HIT_LAYER_ID, MAX_ZOOM, MIN_ZOOM } from "./constants";
-import { cameraClamp, fitBounds } from "./geo/bounds";
+import { HOUSES_HIT_LAYER_ID, LABELS_ANCHOR_ID, MAX_ZOOM, MIN_ZOOM } from "./constants";
+import { fitBounds } from "./geo/bounds";
 import { buildHouseLayers } from "./geo/houses";
 import { buildRouteLayers, onlyMyGroups } from "./geo/routes";
 import { leadsToGeoJSON } from "./geo/leads";
@@ -17,7 +17,6 @@ import { styleTrails } from "./geo/trails";
 import { dispatchHouseGesture, firstHouseId, nextZoom } from "./interactions";
 import { HouseLayers } from "./layers/HouseLayers";
 import { MemberPin } from "./layers/MemberPin";
-import { OutskirtsLayer } from "./layers/OutskirtsLayer";
 import { BLOCKS_HIT_LAYER_ID, NOTES_HIT_LAYER_ID, PlanBlocks, PlanLines, PlanNotes } from "./layers/PlanLayers";
 import { RouteBadges, RouteLines } from "./layers/RouteLayers";
 import { PinLayers, PINS_HIT_LAYER_ID } from "./layers/PinLayers";
@@ -25,7 +24,8 @@ import { TeamNotes, TeamUnder } from "./layers/TeamLayers";
 import { SuggestMarkers, SuggestWalks } from "./layers/SuggestLayers";
 import { TrailLayers } from "./layers/TrailLayers";
 import type { Bounds, KnockdMapHandle, KnockdMapProps } from "./types";
-import { useKnockdStyle } from "./useKnockdStyle";
+import { LabelsAnchorContext } from "./labelsAnchor";
+import { styleUrl, useKnockdStyle } from "./useKnockdStyle";
 
 const toTuple = (b: Bounds): [number, number, number, number] => [b.sw[0], b.sw[1], b.ne[0], b.ne[1]];
 
@@ -56,6 +56,8 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
     onZoomChange,
   } = props;
   const mapStyle = useKnockdStyle();
+  // The plain server style (still loading, or offline) has no labels anchor to draw under.
+  const labelsAnchor = mapStyle === styleUrl() ? undefined : LABELS_ANCHOR_ID;
   const mapRef = useRef<MapRef>(null);
   const cameraRef = useRef<CameraRef>(null);
   const lastZoom = useRef<number | null>(null);
@@ -82,11 +84,9 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
     [routeData.houseColours, houseHighlights],
   );
   const houseData = useMemo(() => buildHouseLayers(houses, houseColours), [houses, houseColours]);
-  // With a plan, progress shows as slug trails along the routes; raw GPS trails only without one.
-  const hasPlan = routes.groups.length > 0;
+  // Everyone's GPS trails always show, plan or not: they're the record of where people went.
   const trailData = useMemo(() => styleTrails(trails, members, showCrewPaths), [trails, members, showCrewPaths]);
   const leadData = useMemo(() => leadsToGeoJSON(leads), [leads]);
-  const clamp = useMemo(() => cameraClamp(workArea), [workArea]);
   const fit = useMemo(() => fitBounds(workArea), [workArea]);
 
   useImperativeHandle(
@@ -166,26 +166,22 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
       onLongPress={(e) => void hit("longPress", e).catch(() => undefined)}
       onRegionDidChange={onRegionDidChange}
     >
-      <Camera
-        ref={cameraRef}
-        initialViewState={{ center, zoom }}
-        minZoom={MIN_ZOOM}
-        maxZoom={MAX_ZOOM}
-        maxBounds={clamp ? toTuple(clamp) : undefined}
-      />
-      {workArea ? <OutskirtsLayer workArea={workArea} /> : null}
-      {team ? <TeamUnder data={team} /> : null}
-      <PlanBlocks plan={plan} blocks={planBlocks} />
-      {hasPlan ? null : <TrailLayers data={trailData} />}
-      <RouteLines data={routeData} />
-      <PlanLines plan={plan} />
-      {suggest ? <SuggestWalks data={suggest} /> : null}
-      <HouseLayers houses={houseData} leads={leadData} />
-      <RouteBadges data={routeData} />
-      {team ? <TeamNotes data={team} /> : null}
-      <PlanNotes plan={plan} />
-      {suggest ? <SuggestMarkers data={suggest} /> : null}
-      {pins ? <PinLayers pins={pins} /> : null}
+      <Camera ref={cameraRef} initialViewState={{ center, zoom }} minZoom={MIN_ZOOM} maxZoom={MAX_ZOOM} />
+      {/* Keyed on the anchor so layers are re-added under the labels once the themed style is in. */}
+      <LabelsAnchorContext.Provider key={labelsAnchor ?? "on-top"} value={labelsAnchor}>
+        {team ? <TeamUnder data={team} /> : null}
+        <PlanBlocks plan={plan} blocks={planBlocks} />
+        <TrailLayers data={trailData} />
+        <RouteLines data={routeData} />
+        <PlanLines plan={plan} />
+        {suggest ? <SuggestWalks data={suggest} /> : null}
+        <HouseLayers houses={houseData} leads={leadData} />
+        <RouteBadges data={routeData} />
+        {team ? <TeamNotes data={team} /> : null}
+        <PlanNotes plan={plan} />
+        {suggest ? <SuggestMarkers data={suggest} /> : null}
+        {pins ? <PinLayers pins={pins} /> : null}
+      </LabelsAnchorContext.Provider>
       {members.map((m) => (
         <MemberPin key={m.memberId} member={m} />
       ))}

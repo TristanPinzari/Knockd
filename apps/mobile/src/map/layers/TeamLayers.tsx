@@ -3,18 +3,26 @@ import { memo } from "react";
 import type { TeamLayersGeo } from "../geo/teamLayers";
 import { COLOURS } from "../constants";
 import { BADGE_FONT, zoomWidth } from "./styles";
+import { useLabelsAnchor } from "../labelsAnchor";
 
 /** Lead-rate block colours and past coverage: under today's plan and routes. */
 function TeamUnderBase({ data }: { data: TeamLayersGeo }) {
+  const below = useLabelsAnchor();
   return (
     <>
       <GeoJSONSource id="knockd-team-lead-rate" data={data.leadRate}>
-        <Layer id="knockd-team-lead-rate" type="fill" style={{ fillColor: ["get", "colour"], fillOpacity: 0.28 }} />
+        <Layer
+          id="knockd-team-lead-rate"
+          type="fill"
+          beforeId={below}
+          style={{ fillColor: ["get", "colour"], fillOpacity: 0.28 }}
+        />
       </GeoJSONSource>
       <GeoJSONSource id="knockd-team-coverage" data={data.coverage}>
         <Layer
           id="knockd-team-coverage"
           type="line"
+          beforeId={below}
           style={{
             lineColor: COLOURS.badgeText,
             lineOpacity: ["get", "opacity"],
@@ -28,11 +36,13 @@ function TeamUnderBase({ data }: { data: TeamLayersGeo }) {
         <Layer
           id="knockd-team-highlight-area-fill"
           type="fill"
+          beforeId={below}
           style={{ fillColor: ["get", "colour"], fillOpacity: 0.12 }}
         />
         <Layer
           id="knockd-team-highlight-area-line"
           type="line"
+          beforeId={below}
           style={{ lineColor: ["get", "colour"], lineWidth: 3, lineOpacity: 0.7, lineJoin: "round" }}
         />
       </GeoJSONSource>
@@ -40,6 +50,7 @@ function TeamUnderBase({ data }: { data: TeamLayersGeo }) {
         <Layer
           id="knockd-team-highlight-line"
           type="line"
+          beforeId={below}
           style={{
             lineColor: ["get", "colour"],
             lineWidth: zoomWidth([14, 6], [17, 14], [19, 22]),

@@ -4,6 +4,7 @@ import { COLOURS, HOUSE_HIT_RADIUS_PX, HOUSE_MIN_ZOOM, HOUSES_HIT_LAYER_ID } fro
 import type { HouseLayers as HouseData } from "../geo/houses";
 import type { FeatureCollection, Point } from "geojson";
 import { GRADE_RADIUS } from "./styles";
+import { useLabelsAnchor } from "../labelsAnchor";
 
 interface Props {
   houses: HouseData;
@@ -15,18 +16,21 @@ interface Props {
  * for today, hollow for previous leads from a team map), and an invisible hit-test layer.
  */
 function HouseLayersBase({ houses, leads }: Props) {
+  const below = useLabelsAnchor();
   return (
     <>
       <GeoJSONSource id="knockd-houses" data={houses.squares}>
         <Layer
           id="knockd-houses-fill"
           type="fill"
+          beforeId={below}
           minzoom={HOUSE_MIN_ZOOM}
           style={{ fillColor: ["coalesce", ["get", "colour"], COLOURS.houseFill], fillOpacity: 1 }}
         />
         <Layer
           id="knockd-houses-outline"
           type="line"
+          beforeId={below}
           minzoom={HOUSE_MIN_ZOOM}
           style={{
             lineColor: ["case", ["to-boolean", ["get", "colour"]], "rgba(0,0,0,0.25)", COLOURS.houseOutline],

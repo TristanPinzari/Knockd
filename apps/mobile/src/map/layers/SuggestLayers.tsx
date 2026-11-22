@@ -3,14 +3,17 @@ import { memo } from "react";
 import type { SuggestGeo } from "@/suggest/suggestView";
 import { COLOURS } from "../constants";
 import { BADGE_FONT, zoomWidth } from "./styles";
+import { useLabelsAnchor } from "../labelsAnchor";
 
 /** The walk from each group's last door to the meeting point: fainter, dotted. */
 function SuggestWalksBase({ data }: { data: SuggestGeo }) {
+  const below = useLabelsAnchor();
   return (
     <GeoJSONSource id="knockd-suggest-to-meet" data={data.toMeet}>
       <Layer
         id="knockd-suggest-to-meet"
         type="line"
+        beforeId={below}
         style={{
           lineColor: ["get", "colour"],
           lineWidth: zoomWidth([14, 2], [17, 4], [19, 6]),

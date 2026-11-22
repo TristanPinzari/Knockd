@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import type { Message } from "@knockd/shared";
 import { logger } from "@/realtime/logger";
 import { useChatStore } from "@/realtime/stores/chatStore";
@@ -74,61 +74,55 @@ export function ChatSheet({ myId, onClose }: { myId: string | null; onClose: () 
   return (
     <>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close chat" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="box-none"
-      >
-        <BottomSheet style={styles.sheet}>
-          <View style={styles.head}>
-            <Text variant="title" style={{ fontSize: 20, flex: 1 }}>
-              Crew chat
+      <BottomSheet style={styles.sheet}>
+        <View style={styles.head}>
+          <Text variant="title" style={{ fontSize: 20, flex: 1 }}>
+            Crew chat
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close chat" onPress={onClose} hitSlop={10}>
+            <Icon name="x" size={22} color={colors.ink.secondary} />
+          </Pressable>
+        </View>
+        <ScrollView
+          ref={scroll}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}
+        >
+          {messages.length === 0 ? (
+            <Text variant="label" color={colors.ink.muted} style={styles.empty}>
+              No messages yet. Say where you&apos;re headed, or when to meet.
             </Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close chat" onPress={onClose} hitSlop={10}>
-              <Icon name="x" size={22} color={colors.ink.secondary} />
-            </Pressable>
-          </View>
-          <ScrollView
-            ref={scroll}
-            style={styles.list}
-            contentContainerStyle={styles.listContent}
-            onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}
+          ) : (
+            messages.map(bubble)
+          )}
+        </ScrollView>
+        {error ? (
+          <Text variant="label" color={colors.brand} style={styles.error}>
+            {error}
+          </Text>
+        ) : null}
+        <View style={styles.inputRow}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder="Message the crew"
+            placeholderTextColor={colors.ink.muted}
+            maxLength={BODY_MAX}
+            multiline
+            style={styles.input}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send"
+            disabled={!text.trim()}
+            onPress={send}
+            style={[styles.send, !text.trim() && styles.sendOff]}
           >
-            {messages.length === 0 ? (
-              <Text variant="label" color={colors.ink.muted} style={styles.empty}>
-                No messages yet. Say where you&apos;re headed, or when to meet.
-              </Text>
-            ) : (
-              messages.map(bubble)
-            )}
-          </ScrollView>
-          {error ? (
-            <Text variant="label" color={colors.brand} style={styles.error}>
-              {error}
-            </Text>
-          ) : null}
-          <View style={styles.inputRow}>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Message the crew"
-              placeholderTextColor={colors.ink.muted}
-              maxLength={BODY_MAX}
-              multiline
-              style={styles.input}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Send"
-              disabled={!text.trim()}
-              onPress={send}
-              style={[styles.send, !text.trim() && styles.sendOff]}
-            >
-              <Icon name="send" size={18} color={colors.ink.onBrand} />
-            </Pressable>
-          </View>
-        </BottomSheet>
-      </KeyboardAvoidingView>
+            <Icon name="send" size={18} color={colors.ink.onBrand} />
+          </Pressable>
+        </View>
+      </BottomSheet>
     </>
   );
 }
@@ -137,7 +131,7 @@ const styles = StyleSheet.create({
   scrim: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.scrim },
   sheet: { paddingHorizontal: 16, maxHeight: "80%" },
   head: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  list: { flexGrow: 0, minHeight: 120 },
+  list: { flexGrow: 0, flexShrink: 1, minHeight: 80 },
   listContent: { gap: 8, paddingVertical: 4 },
   empty: { textAlign: "center", paddingVertical: 24 },
   bubbleRow: { alignItems: "flex-start", gap: 2, maxWidth: "85%" },

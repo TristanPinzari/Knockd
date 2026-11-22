@@ -44,6 +44,15 @@ function serialised<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
   return next;
 }
 
+type PlanListener = (sessionId: string, plan: PlanContent) => void;
+const planListeners = new Set<PlanListener>();
+
+/** Called after every saved plan edit (the simulated crew uses it to follow new routes). */
+export function onPlanChanged(listener: PlanListener): () => void {
+  planListeners.add(listener);
+  return () => planListeners.delete(listener);
+}
+
 export function editPlan(sessionId: string, authorId: string, op: PlanEditOp): Promise<PlanContent> {
   return serialised(sessionId, async () => {
     await assertLive(sessionId);
@@ -66,6 +75,7 @@ export function editPlan(sessionId: string, authorId: string, op: PlanEditOp): P
       })
       .returning({ version: sessionPlans.version });
     emitToSession(sessionId, "plan:updated", { plan: updated, version: saved!.version, editedBy: authorId });
+    for (const listener of planListeners) listener(sessionId, updated);
     return updated;
   });
 }

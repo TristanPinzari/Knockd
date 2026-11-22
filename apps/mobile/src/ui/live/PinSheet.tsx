@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { PIN_LABEL_MAX, type Pin } from "@knockd/shared";
 import { colors, FONT_REGULAR, radii } from "@/theme";
 import { BottomSheet } from "../BottomSheet";
@@ -31,49 +31,43 @@ export function PinSheet({ mode, onDrop, onRemove, onClose }: PinSheetProps) {
   return (
     <>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="box-none"
-      >
-        <BottomSheet style={styles.sheet}>
-          {mode.kind === "new" ? (
-            <>
-              <Text variant="heading">Drop a pin</Text>
-              <Text variant="label" color={colors.ink.secondary} style={styles.sub}>
-                Everyone sees it. Add a few words if it helps (optional).
+      <BottomSheet style={styles.sheet}>
+        {mode.kind === "new" ? (
+          <>
+            <Text variant="heading">Drop a pin</Text>
+            <Text variant="label" color={colors.ink.secondary} style={styles.sub}>
+              Everyone sees it. Add a few words if it helps (optional).
+            </Text>
+            <TextInput
+              value={label}
+              onChangeText={setLabel}
+              placeholder='e.g. "Meet up here once done"'
+              placeholderTextColor={colors.ink.muted}
+              maxLength={PIN_LABEL_MAX}
+              style={styles.input}
+            />
+            <View style={styles.chips}>
+              {SUGGESTED.map((s) => (
+                <Chip key={s} label={s} height={32} selected={label === s} onPress={() => setLabel(s)} />
+              ))}
+            </View>
+            <Button label="Drop pin" onPress={() => onDrop(label.trim())} />
+          </>
+        ) : (
+          <>
+            <View style={styles.titleRow}>
+              <View style={[styles.dot, { backgroundColor: mode.byColour }]} />
+              <Text variant="heading" style={{ flex: 1 }}>
+                {mode.pin.label || "Pin"}
               </Text>
-              <TextInput
-                value={label}
-                onChangeText={setLabel}
-                placeholder='e.g. "Meet up here once done"'
-                placeholderTextColor={colors.ink.muted}
-                maxLength={PIN_LABEL_MAX}
-                style={styles.input}
-              />
-              <View style={styles.chips}>
-                {SUGGESTED.map((s) => (
-                  <Chip key={s} label={s} height={32} selected={label === s} onPress={() => setLabel(s)} />
-                ))}
-              </View>
-              <Button label="Drop pin" onPress={() => onDrop(label.trim())} />
-            </>
-          ) : (
-            <>
-              <View style={styles.titleRow}>
-                <View style={[styles.dot, { backgroundColor: mode.byColour }]} />
-                <Text variant="heading" style={{ flex: 1 }}>
-                  {mode.pin.label || "Pin"}
-                </Text>
-              </View>
-              <Text variant="label" color={colors.ink.secondary} style={styles.sub}>
-                Dropped by {mode.byName} at {timeOfDay(mode.pin.createdAt)}
-              </Text>
-              <Button label="Remove pin" variant="secondary" onPress={() => onRemove(mode.pin.clientId)} />
-            </>
-          )}
-        </BottomSheet>
-      </KeyboardAvoidingView>
+            </View>
+            <Text variant="label" color={colors.ink.secondary} style={styles.sub}>
+              Dropped by {mode.byName} at {timeOfDay(mode.pin.createdAt)}
+            </Text>
+            <Button label="Remove pin" variant="secondary" onPress={() => onRemove(mode.pin.clientId)} />
+          </>
+        )}
+      </BottomSheet>
     </>
   );
 }

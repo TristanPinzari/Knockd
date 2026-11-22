@@ -1497,8 +1497,8 @@ export function streetPath(streets: SuggestStreet[], stops: (LatLng & { streetId
 // ============================== Applying a suggestion ==============================
 
 /**
- * The planning edits that apply an option. It replaces existing claims on the option's blocks and
- * the crew's old dashed routes, then claims each group's blocks for its members and draws one
+ * The planning edits that apply an option. It replaces existing claims on the option's blocks, the
+ * crew's claims from any earlier plan, and the crew's old dashed routes, then claims each group's blocks for its members and draws one
  * dashed route per group (in the first member's colour). Everything stays editable by anyone.
  * `newId` makes drawing IDs (UUIDs).
  */
@@ -1507,7 +1507,7 @@ export function suggestionToPlanOps(option: SuggestOption, plan: PlanContent, ne
   const crew = new Set(option.groups.flatMap((gr) => gr.memberIds));
   const ops: PlanEditOp[] = [
     ...plan.claims
-      .filter((c) => blocks.has(c.blockId))
+      .filter((c) => blocks.has(c.blockId) || crew.has(c.memberId))
       .map((c): PlanEditOp => ({ op: "unclaim", blockId: c.blockId, memberId: c.memberId })),
     ...plan.drawings
       .filter((d) => d.kind === "route" && d.memberId !== null && crew.has(d.memberId))

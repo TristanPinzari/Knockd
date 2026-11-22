@@ -40,9 +40,19 @@ const plan: PlanContent = {
 describe("buildPlanGeo", () => {
   const geo = buildPlanGeo(plan, blocks, colours);
 
-  it("a pair's block is filled in one colour and outlined in the other", () => {
-    expect(geo.claims.features).toHaveLength(1);
-    expect(geo.claims.features[0]!.properties).toEqual({ blockId: 5, fill: "#E4572E", outline: "#2E86AB", count: 2 });
+  it("blocks that belong to a Suggest route aren't filled: the route shows the plan", () => {
+    expect(geo.claims.features).toHaveLength(0);
+  });
+
+  it("a block claimed by hand is filled in one colour and outlined in the other", () => {
+    const byHand = buildPlanGeo({ ...plan, drawings: [] }, blocks, colours);
+    expect(byHand.claims.features).toHaveLength(1);
+    expect(byHand.claims.features[0]!.properties).toEqual({
+      blockId: 5,
+      fill: "#E4572E",
+      outline: "#2E86AB",
+      count: 2,
+    });
   });
 
   it("member routes are left to the route layers; utility routes and freehand are drawn here", () => {

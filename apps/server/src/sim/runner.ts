@@ -10,16 +10,26 @@ import { sessionMembers, sessions } from "../db/schema";
 import { HttpError } from "../http/errors";
 import { logger } from "../logger";
 import { emitToSession, setVirtualPresence } from "../realtime/io";
-import { getPlan } from "../sessions/planning";
+import { getPlan, onPlanChanged } from "../sessions/planning";
 import { addMembers, getMembers } from "../sessions/service";
 import { addLead, addPings } from "../sessions/writes";
+import { routesFromPlan } from "./planFollow";
 import { planRoutes, type Stop } from "./routes";
 
 const BOT_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Riley", "Casey", "Morgan"];
 const WALK_SPEED_MS = 1.3;
 const TICK_MS = 1000;
-const SAMPLE_EVERY_TICKS = 5; // a GPS point every 5 s
-const FLUSH_EVERY_TICKS = 15; // uploaded in batches every 15 s, like a phone
+
+/**
+ * Per pace: how many simulated seconds pass each tick (the demo runs a bit faster than real life,
+ * walking 1.3 × 1.5 ≈ 2 m/s, still under the 2.5 m/s "driving" limit), how often a GPS point is
+ * taken, and how often points are uploaded. The demo uploads often so dots move smoothly on screen;
+ * realistic uploads in batches like a phone.
+ */
+const TIMING: Record<SimPace, { speedUp: number; sampleEveryTicks: number; flushEveryTicks: number }> = {
+  demo: { speedUp: 1.5, sampleEveryTicks: 2, flushEveryTicks: 4 },
+  realistic: { speedUp: 1, sampleEveryTicks: 5, flushEveryTicks: 15 },
+};
 const GPS_JITTER_M = 3;
 const LEAD_CHANCE: Record<SimPace, number> = { demo: 0.06, realistic: 0.08 };
 const GRADES: [Grade, number][] = [
@@ -41,6 +51,8 @@ interface Bot {
 interface Run {
   sessionId: string;
   pace: SimPace;
+  /** Every bot in the session, including ones with nothing to walk yet. */
+  botIds: string[];
   bots: Bot[];
   timer: NodeJS.Timeout;
   ticks: number;
@@ -64,7 +76,10 @@ export async function startSim(sessionId: string, count: number, pace: SimPace):
 
   let routes: Awaited<ReturnType<typeof planRoutes>>;
   try {
-    routes = await planRoutes(sessionId, botIds, pace, (await getPlan(sessionId)).plan);
+    const { plan } = await getPlan(sessionId);
+    routes = await planRoutes(sessionId, botIds, pace, plan);
+    // Bots that are in a used Suggest plan walk its routes instead.
+    for (const [botId, route] of await routesFromPlan(plan, botIds, pace)) if (route.length) routes.set(botId, route);
   } catch (err) {
     await markLeft(botIds); // don't leave bots behind if there's nothing to walk
     throw err;
@@ -84,6 +99,7 @@ export async function startSim(sessionId: string, count: number, pace: SimPace):
   const run: Run = {
     sessionId,
     pace,
+    botIds,
     bots: bots.filter((b) => b.route.length),
     ticks: 0,
     usedHouses: new Set(),
@@ -126,6 +142,48 @@ async function markLeft(memberIds: string[]) {
     .where(and(inArray(sessionMembers.id, memberIds), eq(sessionMembers.isBot, true)));
 }
 
+// ============================== Following the plan ==============================
+
+/** Suggest sends a burst of edits (unclaims, claims, routes); re-plan once it has settled. */
+const REPLAN_DELAY_MS = 1500;
+const replanTimers = new Map<string, NodeJS.Timeout>();
+
+onPlanChanged((sessionId) => {
+  if (!runs.has(sessionId)) return;
+  clearTimeout(replanTimers.get(sessionId));
+  replanTimers.set(
+    sessionId,
+    setTimeout(() => {
+      replanTimers.delete(sessionId);
+      void followPlan(sessionId).catch((err: unknown) =>
+        logger.error({ err, sessionId }, "simulated crew could not follow the plan"),
+      );
+    }, REPLAN_DELAY_MS),
+  );
+});
+
+/**
+ * Bots in one of the plan's groups drop what they were doing and walk their group's route: from
+ * where they are to its start, then along it, stopping at their doors. Other bots carry on.
+ */
+async function followPlan(sessionId: string) {
+  const run = runs.get(sessionId);
+  if (!run) return;
+  const routes = await routesFromPlan((await getPlan(sessionId)).plan, run.botIds, run.pace);
+  for (const [memberId, route] of routes) {
+    if (!route.length) continue;
+    const bot = run.bots.find((b) => b.memberId === memberId);
+    if (bot) {
+      bot.route = [{ lat: bot.lat, lng: bot.lng, stopS: 0, houseIds: [] }, ...route];
+      bot.next = 0;
+      bot.waitS = 0;
+    } else {
+      run.bots.push({ memberId, route, next: 0, lat: route[0]!.lat, lng: route[0]!.lng, waitS: 0, pending: [] });
+    }
+  }
+  if (routes.size) logger.info({ sessionId, bots: routes.size }, "simulated crew following the plan");
+}
+
 // ============================== Simulation loop ==============================
 
 async function tick(run: Run) {
@@ -134,8 +192,9 @@ async function tick(run: Run) {
   try {
     run.ticks++;
     for (const bot of run.bots) await step(run, bot);
-    if (run.ticks % SAMPLE_EVERY_TICKS === 0) for (const bot of run.bots) sample(bot);
-    if (run.ticks % FLUSH_EVERY_TICKS === 0) {
+    const timing = TIMING[run.pace];
+    if (run.ticks % timing.sampleEveryTicks === 0) for (const bot of run.bots) sample(bot);
+    if (run.ticks % timing.flushEveryTicks === 0) {
       await flush(run);
       // Late writes are allowed after a session ends, so stop the bots ourselves.
       const [s] = await db.select({ status: sessions.status }).from(sessions).where(eq(sessions.id, run.sessionId));
@@ -152,15 +211,16 @@ async function tick(run: Run) {
   }
 }
 
-/** One second of a bot's life: stand at a door, or walk toward the next point. */
+/** One tick of a bot's life: stand at a door, or walk toward the next point. */
 async function step(run: Run, bot: Bot) {
+  const seconds = (TICK_MS / 1000) * TIMING[run.pace].speedUp;
   if (bot.waitS > 0) {
-    bot.waitS -= TICK_MS / 1000;
+    bot.waitS -= seconds;
     return;
   }
   const target = bot.route[bot.next];
   if (!target) return; // finished the route: stays put
-  const budget = WALK_SPEED_MS * (TICK_MS / 1000);
+  const budget = WALK_SPEED_MS * seconds;
   const d = distanceM(bot, target);
   if (d > budget) {
     const f = budget / d;

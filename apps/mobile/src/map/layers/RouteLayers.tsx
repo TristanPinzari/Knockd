@@ -2,6 +2,7 @@ import { GeoJSONSource, Layer, type FilterSpecification } from "@maplibre/maplib
 import { memo, useMemo } from "react";
 import { COLOURS } from "../constants";
 import { stripeKinds, type RouteLayerData } from "../geo/routes";
+import { useLabelsAnchor } from "../labelsAnchor";
 import {
   BADGE_FONT,
   BADGE_MIN_ZOOM,
@@ -24,6 +25,7 @@ interface LinesProps {
 
 /** Planned routes (casing + dashes in each member's colour), slug trails on top, and the car. */
 function RouteLinesBase({ data }: LinesProps) {
+  const below = useLabelsAnchor();
   const todoKinds = useMemo(() => stripeKinds(data.todo), [data.todo]);
   const doneKinds = useMemo(() => stripeKinds(data.done), [data.done]);
   return (
@@ -32,6 +34,7 @@ function RouteLinesBase({ data }: LinesProps) {
         <Layer
           id="knockd-route-casing"
           type="line"
+          beforeId={below}
           style={{
             lineColor: COLOURS.routeCasing,
             lineWidth: ROUTE_CASING_WIDTH,
@@ -48,6 +51,7 @@ function RouteLinesBase({ data }: LinesProps) {
             key={`${slot}/${count}`}
             id={`knockd-route-todo-${slot}-${count}`}
             type="line"
+            beforeId={below}
             filter={stripeIs(slot, count)}
             style={{
               lineColor: ["get", "colour"],
@@ -67,6 +71,7 @@ function RouteLinesBase({ data }: LinesProps) {
               key={`${slot}/${count}`}
               id={`knockd-route-done-${slot}-${count}`}
               type="line"
+              beforeId={below}
               filter={stripeIs(slot, count)}
               style={{
                 lineColor: ["get", "colour"],

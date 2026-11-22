@@ -80,7 +80,11 @@ export function buildPlanGeo(
 ): PlanGeo {
   const claimers = new Map<number, string[]>();
   for (const c of plan?.claims ?? []) claimers.set(c.blockId, [...(claimers.get(c.blockId) ?? []), c.memberId]);
-  const claims = [...claimers].flatMap(([blockId, members]) => {
+  // A Suggest plan claims its blocks for each group; the dashed route already shows that plan, so
+  // only blocks claimed by hand (no one claiming them has a route) are filled.
+  const routed = new Set((plan?.drawings ?? []).filter(isMemberRoute).map((d) => d.memberId));
+  const byHand = [...claimers].filter(([, members]) => !members.some((m) => routed.has(m)));
+  const claims = byHand.flatMap(([blockId, members]) => {
     const block = blocks[String(blockId)];
     if (!block) return [];
     const fill = colours[members[0]!] ?? UNKNOWN_COLOUR;
