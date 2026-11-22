@@ -22,11 +22,15 @@ export interface SuggestStreetInfo {
 export interface SuggestForSessionInput {
   readonly houses: Readonly<Record<string, SuggestHouseInfo>>;
   readonly streets: Readonly<Record<string, SuggestStreetInfo>>;
-  /** Houses inside it are selected; null selects every loaded house. */
+  /** Houses inside it are selected; null selects every loaded house. Ignored when selectedHouseIds is set. */
   readonly plannedArea: Polygon | MultiPolygon | null;
+  /** The houses the crew picked with the brush (they must all be visited). */
+  readonly selectedHouseIds?: ReadonlySet<string>;
   readonly memberIds: readonly string[];
   /** Where the crew starts (the car). */
   readonly start: LatLng;
+  /** Optional regroup pin. */
+  readonly regroup?: LatLng | null;
   readonly secondsPerDoor?: number;
 }
 
@@ -53,7 +57,10 @@ const toId = (id: string): number | null => (Number.isFinite(Number(id)) ? Numbe
 
 /** Null when there's nothing to plan (no crew or no houses loaded inside the area). */
 export function suggestForSession(input: SuggestForSessionInput): SuggestResult | null {
-  const houses = Object.values(input.houses).filter((h) => !input.plannedArea || inArea(input.plannedArea, h.centre));
+  const picked = input.selectedHouseIds;
+  const houses = Object.values(input.houses).filter((h) =>
+    picked ? picked.has(h.houseId) : !input.plannedArea || inArea(input.plannedArea, h.centre),
+  );
   if (houses.length === 0 || input.memberIds.length === 0) return null;
   return suggestRoutes({
     streets: Object.values(input.streets).flatMap((s) => {
@@ -78,6 +85,7 @@ export function suggestForSession(input: SuggestForSessionInput): SuggestResult 
     }),
     memberIds: [...input.memberIds],
     start: input.start,
+    regroup: input.regroup ?? null,
     secondsPerDoor: input.secondsPerDoor ?? DEFAULT_SECONDS_PER_DOOR,
   });
 }

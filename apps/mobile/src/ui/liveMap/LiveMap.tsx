@@ -2,6 +2,8 @@ import { forwardRef, useMemo } from "react";
 import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { KnockdMap, type KnockdMapHandle } from "@/map";
 import type { PlanTap } from "@/map/types";
+import type { RouteProgressView } from "@/routes";
+import type { SuggestGeo } from "@/suggest/suggestView";
 import { blocksGeo, buildPlanGeo } from "@/plan/planGeo";
 import { buildWorkArea, placeLeads, useAreaStore, useAreaSync } from "@/area";
 import { BYRON } from "@/map/constants";
@@ -23,6 +25,10 @@ export interface LiveMapProps {
   /** Planning mode: shows every block and sends taps to `onPlanTap`. */
   readonly planning?: boolean;
   readonly onPlanTap?: (tap: PlanTap) => void;
+  /** Suggest preview: drawn instead of the plan's routes. */
+  readonly routesOverride?: RouteProgressView | null;
+  readonly suggest?: SuggestGeo;
+  readonly houseHighlights?: Readonly<Record<string, string>>;
 }
 
 export interface LiveMapState {
@@ -101,7 +107,19 @@ export function useLiveMapData(): LiveMapState {
 }
 
 export const LiveMap = forwardRef<KnockdMapHandle, LiveMapProps>(function LiveMap(
-  { data, mapKey, crewOn, style, onHousePress, onHouseLongPress, planning = false, onPlanTap },
+  {
+    data,
+    mapKey,
+    crewOn,
+    style,
+    onHousePress,
+    onHouseLongPress,
+    planning = false,
+    onPlanTap,
+    routesOverride,
+    suggest,
+    houseHighlights,
+  },
   ref,
 ) {
   return (
@@ -112,7 +130,7 @@ export const LiveMap = forwardRef<KnockdMapHandle, LiveMapProps>(function LiveMa
       center={data.center}
       zoom={data.zoom}
       workArea={data.workArea}
-      routes={data.routes}
+      routes={routesOverride ?? data.routes}
       colours={data.colours}
       members={data.members}
       trails={data.trails}
@@ -121,6 +139,8 @@ export const LiveMap = forwardRef<KnockdMapHandle, LiveMapProps>(function LiveMa
       showCrewPaths={crewOn}
       plan={data.plan}
       planBlocks={planning ? data.blocks : null}
+      suggest={suggest}
+      houseHighlights={houseHighlights}
       onHousePress={onHousePress}
       onHouseLongPress={onHouseLongPress}
       onPlanTap={planning ? onPlanTap : undefined}

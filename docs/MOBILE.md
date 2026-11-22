@@ -365,7 +365,7 @@ To see what it should look like, open [suggest-viewer.html](suggest-viewer.html)
    const { secondsPerDoor } = await api<DoorTimeRes>(`/v1/sessions/${id}/door-time`, {}, token);
    const result = suggestRoutes({
      ...suggestInputFromArea(cachedCells, selectedHouseIds), // the raw /area cells
-     memberIds: members.filter((m) => !m.isBot).map((m) => m.id),
+     memberIds: members.map((m) => m.id), // bots too: simulated crew walk their claimed blocks
      start: carOrMyLocation,
      regroup: regroupPin ?? undefined,
      secondsPerDoor,
@@ -378,6 +378,16 @@ To see what it should look like, open [suggest-viewer.html](suggest-viewer.html)
 7. Move the car and pin markers to `result.start` and `result.regroup` (Suggest snaps them onto the nearest street). If `unroutedHouseIds` isn't empty, warn that those houses have no known street
 8. **Swapping people:** swap `memberIds` between groups, and the `memberId`s in their `knocks`
 9. **Picking an option:** send each op from `suggestionToPlanOps(option, plan, () => Crypto.randomUUID())` with `plan:edit`, **in order**. The routes and claims become normal plan items anyone can edit
+
+**Built** (step 7). In planning mode, tap **Suggest**:
+
+- **Select / Unselect** brush houses (a circle about 28 px across, the same on screen at any zoom). **Car** and **Meet pin** are one tap on the map. Without a car, routes start at this phone's location (or the session centre)
+- **Suggest** fetches the door time, then plans every crew split for everyone in the session, bots included (the simulated crew walk the blocks claimed for them)
+- **Pick a plan:** options best first, each with "back together ~7:35 pm" and how much longer than the best. The chosen one previews on the map with the normal route layers (dashed routes in group colours, houses coloured and numbered per person) plus the walk to the meeting point, dotted and fainter. Tap a person, then someone in another group, to swap them
+- **Use this plan** sends the ops through the plan editor, so it can be undone like any edit. **Change houses** goes back to the selection
+- **U-turns:** every drawn route, previewed or saved, gets a "U" badge wherever it turns back on itself (`src/routes/uTurns.ts`)
+- Code: `src/suggest/` (`suggestView.ts`: brush, preview, swaps, labels; `suggestStore.ts`: the flow; `useSuggestMap.ts`: map data and brush), panel in `src/ui/plan/SuggestPanel.tsx`, map layers in `src/map/layers/SuggestLayers.tsx`
+- Known gap: once saved, door numbers come from the shared plan (`src/routes/fromSharedPlan.ts`, which works them out again from the routes and claims), so they can differ slightly from the preview's
 
 ### Pins and chat
 

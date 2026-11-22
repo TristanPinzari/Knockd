@@ -11,8 +11,9 @@ interface DrawOverlayProps {
   /** Colour of the line while drawing. */
   readonly colour: string;
   readonly dashed?: boolean;
-  /** The eraser: a wide, see-through trail. */
-  readonly eraser?: boolean;
+  /** Line width in pixels (the eraser and the house brush are wide). */
+  readonly width?: number;
+  readonly opacity?: number;
   /** The finger lifted: every point of the stroke, in map-view pixels (one point for a tap). */
   readonly onStroke: (points: ScreenPoint[]) => unknown;
 }
@@ -47,11 +48,11 @@ function strokeResponder(onPoints: (points: ScreenPoint[]) => void, onStroke: (p
 }
 
 /**
- * Sits over the map while a drawing tool (route, freehand, eraser) is on: one finger draws instead
+ * Sits over the map while a drawing tool (route, freehand, eraser, the Suggest brush) is on: one finger draws instead
  * of moving the map. Shows the line under the finger, then hands the points over on release.
  * Switch to the Move tool to move the map.
  */
-export function DrawOverlay({ colour, dashed = false, eraser = false, onStroke }: DrawOverlayProps) {
+export function DrawOverlay({ colour, dashed = false, width = 4, opacity = 1, onStroke }: DrawOverlayProps) {
   const [drawn, setDrawn] = useState<ScreenPoint[]>([]);
 
   // Pass a stable onStroke: a new one rebuilds the responder (fine between strokes, not during one).
@@ -59,14 +60,15 @@ export function DrawOverlay({ colour, dashed = false, eraser = false, onStroke }
 
   return (
     <View style={StyleSheet.absoluteFill} {...responder.panHandlers}>
-      {drawn.length > 1 ? (
+      {drawn.length > 0 ? (
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
           <Polyline
-            points={drawn.map(([x, y]) => `${x},${y}`).join(" ")}
+            // A single point (a tap) still shows: repeat it so the round cap draws a dot.
+            points={(drawn.length === 1 ? [drawn[0]!, drawn[0]!] : drawn).map(([x, y]) => `${x},${y}`).join(" ")}
             fill="none"
             stroke={colour}
-            strokeOpacity={eraser ? 0.35 : 1}
-            strokeWidth={eraser ? 28 : 4}
+            strokeOpacity={opacity}
+            strokeWidth={width}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={dashed ? "8 6" : undefined}

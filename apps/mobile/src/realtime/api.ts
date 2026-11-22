@@ -6,6 +6,7 @@ import type { z } from "zod";
 import {
   ApiError,
   CreateSessionRes,
+  DoorTimeRes,
   GetMessagesRes,
   JoinSessionRes,
   PostLeadRes,
@@ -17,6 +18,7 @@ import {
   TrailsRes,
   type CreateSessionBody,
   type CreateSessionRes as CreateSessionResT,
+  type DoorTimeRes as DoorTimeResT,
   type JoinSessionBody,
   type JoinSessionRes as JoinSessionResT,
   type SimPace,
@@ -77,6 +79,8 @@ export interface ApiClient {
   /** Admin only. Starts `bots` simulated crew members (1 to 7). */
   startSim(sessionId: string, token: string, bots: number, pace: SimPace): Promise<StartSimResT>;
   stopSim(sessionId: string, token: string): Promise<void>;
+  /** Seconds per door for Suggest (the default until it is learned from team history). */
+  getDoorTime(sessionId: string, token: string): Promise<DoorTimeResT>;
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -183,5 +187,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     startSim: (sessionId, token, bots, pace) =>
       request({ method: "POST", path: `${base(sessionId)}/sim`, token, body: { bots, pace }, schema: StartSimRes }),
     stopSim: (sessionId, token) => request({ method: "DELETE", path: `${base(sessionId)}/sim`, token, schema: null }),
+    getDoorTime: (sessionId, token) =>
+      request({ method: "GET", path: `${base(sessionId)}/door-time`, token, schema: DoorTimeRes }),
   };
 }

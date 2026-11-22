@@ -1,6 +1,7 @@
 import type { StyleProp, ViewStyle } from "react-native";
 import type { RouteProgressView } from "@/routes";
 import type { PlanGeo } from "@/plan/planGeo";
+import type { SuggestGeo } from "@/suggest/suggestView";
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
 
 export type TrailMode = "knocking" | "walking" | "driving";
@@ -47,6 +48,10 @@ export interface KnockdMapProps {
   plan: PlanGeo;
   /** Every loaded block (outlines and tap targets), only while planning; null otherwise. */
   planBlocks: FeatureCollection<Polygon, { blockId: number }> | null;
+  /** Suggest: the walks to the meeting point, and the car and regroup pin. */
+  suggest?: SuggestGeo;
+  /** House id → fill colour drawn over everything else (the Suggest selection). */
+  houseHighlights?: Readonly<Record<string, string>>;
   onHousePress?: (houseId: string) => void;
   onHouseLongPress?: (houseId: string) => void;
   /** Set while planning: every tap goes here instead of onHousePress. */
