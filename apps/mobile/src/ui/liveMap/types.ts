@@ -1,6 +1,7 @@
 import type { FeatureCollection, Point, Polygon } from "geojson";
 import type { MapLead, MapMember, TrailCollection } from "@/map/types";
 import type { RouteProgressView } from "@/routes";
+import type { PlanGeo } from "@/plan/planGeo";
 
 /** Everything the Live map screen hands to KnockdMap (minus interaction props). */
 export interface LiveMapData {
@@ -19,6 +20,10 @@ export interface LiveMapData {
   /** Demo houses are points; backend houses are (simplified) polygons. */
   readonly houses: FeatureCollection<Point | Polygon, { houseId: string }>;
   readonly leads: MapLead[];
+  /** The shared plan as map layers. */
+  readonly plan: PlanGeo;
+  /** Every loaded block, shown (and tappable) while planning. */
+  readonly blocks: FeatureCollection<Polygon, { blockId: number }>;
 }
 
 /** The slice of a live crew member the map needs (structural, so this file stays free of native imports). */

@@ -7,6 +7,7 @@ import { placeLeads } from "@/area/leads";
 import { buildWorkArea } from "@/area/planAreas";
 import { buildRouteProgress, routePlanFromSharedPlan } from "@/routes";
 import { BYRON } from "@/map/constants";
+import { blocksGeo, buildPlanGeo } from "@/plan/planGeo";
 import type { CrewBadge, LiveCrewMember, LiveMapData } from "./types";
 
 /** Zoom for a live session: a few blocks around the session centre. */
@@ -83,12 +84,15 @@ export interface SessionMapInput {
  */
 export function buildSessionMapData(input: SessionMapInput): LiveMapData {
   const workArea = buildWorkArea(input.plan, input.area.blocks);
+  const colours = crewColours(input.crew);
   return {
     center: sessionCentre(input.plannedArea, workArea) ?? BYRON,
     zoom: SESSION_ZOOM,
     workArea,
     routes: buildRouteProgress(routePlanFromSharedPlan(input.plan, input.area.houses), input.trailPoints),
-    colours: crewColours(input.crew),
+    colours,
+    plan: buildPlanGeo(input.plan, input.area.blocks, colours),
+    blocks: blocksGeo(input.area.blocks),
     crew: crewBadges(input.crew, input.myMemberId),
     members: toMapMembers(input.crew, input.myMemberId),
     trails: input.trails,

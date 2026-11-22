@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PlanContent } from "@knockd/shared";
+import { applyPlanEdit, type PlanContent, type PlanEditOp } from "@knockd/shared";
 
 /**
  * The session's single shared plan (claims, drawings, notes), kept in sync by version (API.md,
@@ -19,6 +19,13 @@ interface PlanState {
   setPlan: (plan: PlanContent, version: number) => void;
   /** A `plan:updated` event. */
   applyUpdate: (plan: PlanContent, version: number, editedBy: string | null) => void;
+  /**
+   * This phone's own edit, shown straight away (the same code the server runs). The version stays
+   * the same, so the server's `plan:updated` for it replaces this copy. Throws if the edit is invalid.
+   */
+  applyLocal: (op: PlanEditOp, authorId: string) => void;
+  /** An edit failed: refetch GET /plan to drop anything shown optimistically. */
+  markStale: () => void;
   reset: () => void;
 }
 
@@ -36,5 +43,11 @@ export const usePlanStore = create<PlanState>()((set) => ({
       const skipped = s.version !== null && version > s.version + 1;
       return { plan, version, editedBy, needsRefetch: skipped };
     }),
+  applyLocal: (op, authorId) => set((s) => (s.plan ? { plan: applyPlanEdit(s.plan, op, authorId) } : s)),
+  // Off then on, so subscribers always see a fresh false → true change.
+  markStale: () => {
+    set({ needsRefetch: false });
+    set({ needsRefetch: true });
+  },
   reset: () => set({ ...initial }),
 }));

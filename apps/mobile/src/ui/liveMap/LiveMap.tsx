@@ -1,6 +1,8 @@
 import { forwardRef, useMemo } from "react";
 import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { KnockdMap, type KnockdMapHandle } from "@/map";
+import type { PlanTap } from "@/map/types";
+import { blocksGeo, buildPlanGeo } from "@/plan/planGeo";
 import { buildWorkArea, placeLeads, useAreaStore, useAreaSync } from "@/area";
 import { BYRON } from "@/map/constants";
 import { useCrewStore, useLeadsStore, useTrailsStore } from "@/realtime";
@@ -18,6 +20,9 @@ export interface LiveMapProps {
   readonly style?: StyleProp<ViewStyle>;
   readonly onHousePress?: (houseId: string) => void;
   readonly onHouseLongPress?: (houseId: string) => void;
+  /** Planning mode: shows every block and sends taps to `onPlanTap`. */
+  readonly planning?: boolean;
+  readonly onPlanTap?: (tap: PlanTap) => void;
 }
 
 export interface LiveMapState {
@@ -58,6 +63,8 @@ function useSessionMapData(myMemberId: string | null): LiveMapData {
     () => placeLeads(leadsById, area.houses, area.pastLeads),
     [leadsById, area.houses, area.pastLeads],
   );
+  const planGeo = useMemo(() => buildPlanGeo(plan, area.blocks, colours), [plan, area.blocks, colours]);
+  const blocks = useMemo(() => blocksGeo(area.blocks), [area.blocks]);
 
   return useMemo(
     () => ({
@@ -71,8 +78,10 @@ function useSessionMapData(myMemberId: string | null): LiveMapData {
       trails,
       houses: area.housesGeoJSON,
       leads,
+      plan: planGeo,
+      blocks,
     }),
-    [centre, workArea, routes, colours, badges, members, trails, area.housesGeoJSON, leads],
+    [centre, workArea, routes, colours, badges, members, trails, area.housesGeoJSON, leads, planGeo, blocks],
   );
 }
 
@@ -92,7 +101,7 @@ export function useLiveMapData(): LiveMapState {
 }
 
 export const LiveMap = forwardRef<KnockdMapHandle, LiveMapProps>(function LiveMap(
-  { data, mapKey, crewOn, style, onHousePress, onHouseLongPress },
+  { data, mapKey, crewOn, style, onHousePress, onHouseLongPress, planning = false, onPlanTap },
   ref,
 ) {
   return (
@@ -110,8 +119,11 @@ export const LiveMap = forwardRef<KnockdMapHandle, LiveMapProps>(function LiveMa
       houses={data.houses}
       leads={data.leads}
       showCrewPaths={crewOn}
+      plan={data.plan}
+      planBlocks={planning ? data.blocks : null}
       onHousePress={onHousePress}
       onHouseLongPress={onHouseLongPress}
+      onPlanTap={planning ? onPlanTap : undefined}
     />
   );
 });
