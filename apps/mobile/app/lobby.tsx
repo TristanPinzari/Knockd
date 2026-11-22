@@ -1,6 +1,6 @@
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
-import { ScrollView, Share, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, Share, StyleSheet, View } from "react-native";
 import { logger } from "@/realtime/logger";
 import { sessionErrorMessage, useActiveSession, useLobbyCrew } from "@/session";
 import { sessionLifecycle } from "@/session/defaultDeps";
@@ -37,15 +37,32 @@ function useSimulatedCrew() {
   return { starting, message, start };
 }
 
+/** Admin: remove someone, after a confirm. Errors show in the lobby's message line. */
+function confirmRemove(name: string, memberId: string, onError: (message: string) => void): void {
+  Alert.alert(`Remove ${name}?`, "They leave the session. They can join again with the code.", [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Remove",
+      style: "destructive",
+      onPress: () =>
+        void sessionLifecycle.removeMember(memberId).catch((cause: unknown) => {
+          logger.warn("lobby: remove failed", cause);
+          onError(`Couldn't remove ${name}. Check your signal and try again.`);
+        }),
+    },
+  ]);
+}
+
 /**
  * Lobby (MOBILE.md screen 5): the join code to share, and who's in, each in their colour (live from
- * `member:joined`). The session admin can add the simulated crew.
+ * `member:joined`). The session admin can add the simulated crew and remove people.
  */
 export default function LobbyScreen() {
   const router = useRouter();
   const active = useActiveSession((state) => state.active);
   const crew = useLobbyCrew();
   const sim = useSimulatedCrew();
+  const [removeError, setRemoveError] = useState<string | null>(null);
   if (!active) return <Redirect href="/" />;
 
   return (
@@ -82,9 +99,21 @@ export default function LobbyScreen() {
               <Text variant="label" color={colors.ink.secondary}>
                 Host
               </Text>
+            ) : active.isAdmin && !member.isMe ? (
+              <Button
+                label="Remove"
+                variant="ghost"
+                onPress={() => confirmRemove(member.name, member.id, setRemoveError)}
+                style={styles.remove}
+              />
             ) : null}
           </Tile>
         ))}
+        {removeError ? (
+          <Text variant="label" color={colors.brand} accessibilityRole="alert">
+            {removeError}
+          </Text>
+        ) : null}
         {crew.length < MAX_CREW ? (
           <View style={styles.waiting}>
             <Icon name="plus" size={20} color={colors.ink.muted} />
@@ -111,13 +140,18 @@ export default function LobbyScreen() {
         ) : null}
       </ScrollView>
       <View style={styles.footer}>
-        <Button label="Go to the map" onPress={() => router.replace("/live")} />
+        <Button
+          label="Go to the map"
+          // Opened from the live map's menu: go back to it rather than stacking a second map.
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/live"))}
+        />
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  remove: { alignSelf: "center", paddingHorizontal: 8 },
   content: { padding: 24, gap: 12, paddingBottom: 120 },
   codeCard: { alignItems: "center", paddingVertical: 16, gap: 8, marginBottom: 4 },
   memberRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10 },

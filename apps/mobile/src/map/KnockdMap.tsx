@@ -20,6 +20,8 @@ import { MemberPin } from "./layers/MemberPin";
 import { OutskirtsLayer } from "./layers/OutskirtsLayer";
 import { BLOCKS_HIT_LAYER_ID, NOTES_HIT_LAYER_ID, PlanBlocks, PlanLines, PlanNotes } from "./layers/PlanLayers";
 import { RouteBadges, RouteLines } from "./layers/RouteLayers";
+import { PinLayers, PINS_HIT_LAYER_ID } from "./layers/PinLayers";
+import { TeamNotes, TeamUnder } from "./layers/TeamLayers";
 import { SuggestMarkers, SuggestWalks } from "./layers/SuggestLayers";
 import { TrailLayers } from "./layers/TrailLayers";
 import type { Bounds, KnockdMapHandle, KnockdMapProps } from "./types";
@@ -44,6 +46,10 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
     planBlocks,
     suggest,
     houseHighlights,
+    pins,
+    team,
+    onPinPress,
+    onMapLongPress,
     onHousePress,
     onHouseLongPress,
     onPlanTap,
@@ -108,6 +114,12 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
       const map = mapRef.current;
       if (!map) return;
       const { point, lngLat } = e.nativeEvent;
+      const at = { lng: lngLat[0], lat: lngLat[1] };
+      if (kind === "tap" && onPinPress && !onPlanTap) {
+        const hitPins = await map.queryRenderedFeatures(point, { layers: [PINS_HIT_LAYER_ID] });
+        const clientId = hitPins[0]?.properties?.clientId;
+        if (typeof clientId === "string") return onPinPress(clientId);
+      }
       if (kind === "tap" && onPlanTap) {
         const [blocks, notes] = await Promise.all([
           planBlocks ? map.queryRenderedFeatures(point, { layers: [BLOCKS_HIT_LAYER_ID] }) : [],
@@ -116,16 +128,18 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
         const blockId = Number(blocks[0]?.properties?.blockId);
         const noteId = notes[0]?.properties?.id;
         onPlanTap({
-          at: { lng: lngLat[0], lat: lngLat[1] },
+          at,
           blockId: Number.isFinite(blockId) ? blockId : null,
           noteId: typeof noteId === "string" ? noteId : null,
         });
         return;
       }
       const features = await map.queryRenderedFeatures(point, { layers: [HOUSES_HIT_LAYER_ID] });
-      dispatchHouseGesture(kind, firstHouseId(features ?? []), { onHousePress, onHouseLongPress });
+      const houseId = firstHouseId(features ?? []);
+      if (kind === "longPress" && houseId === null) return onMapLongPress?.(at);
+      dispatchHouseGesture(kind, houseId, { onHousePress, onHouseLongPress });
     },
-    [onHousePress, onHouseLongPress, onPlanTap, planBlocks],
+    [onHousePress, onHouseLongPress, onPlanTap, planBlocks, onPinPress, onMapLongPress],
   );
 
   const onRegionDidChange = useCallback(
@@ -160,6 +174,7 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
         maxBounds={clamp ? toTuple(clamp) : undefined}
       />
       {workArea ? <OutskirtsLayer workArea={workArea} /> : null}
+      {team ? <TeamUnder data={team} /> : null}
       <PlanBlocks plan={plan} blocks={planBlocks} />
       {hasPlan ? null : <TrailLayers data={trailData} />}
       <RouteLines data={routeData} />
@@ -167,8 +182,10 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
       {suggest ? <SuggestWalks data={suggest} /> : null}
       <HouseLayers houses={houseData} leads={leadData} />
       <RouteBadges data={routeData} />
+      {team ? <TeamNotes data={team} /> : null}
       <PlanNotes plan={plan} />
       {suggest ? <SuggestMarkers data={suggest} /> : null}
+      {pins ? <PinLayers pins={pins} /> : null}
       {members.map((m) => (
         <MemberPin key={m.memberId} member={m} />
       ))}

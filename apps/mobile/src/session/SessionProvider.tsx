@@ -5,6 +5,7 @@
  */
 import { router } from "expo-router";
 import { useEffect, type ReactNode } from "react";
+import { Alert } from "react-native";
 import { startTracking } from "../location";
 import { useMyLocationStore } from "../location/myLocationStore";
 import { useOfflineArea } from "../map/useOfflineArea";
@@ -39,6 +40,18 @@ function useEndedWatcher(active: ActiveSession | null): void {
   }, [active, status]);
 }
 
+/** The admin removed me: leave the session on this phone and say so. */
+function useRemovedWatcher(active: ActiveSession | null): void {
+  const removed = useCrewStore((s) => s.removedMe);
+  useEffect(() => {
+    if (!active || !removed) return;
+    void sessionLifecycle.teardown().then(() => {
+      router.replace("/");
+      Alert.alert("Removed from the session", "The host removed you. Ask them for the code to join again.");
+    });
+  }, [active, removed]);
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const active = useActiveSession((s) => s.active);
   useSessionSocket(active?.token ?? null);
@@ -51,6 +64,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useTracking(active);
   useOfflineArea(active?.sessionId ?? null);
   useEndedWatcher(active);
+  useRemovedWatcher(active);
 
   return <>{children}</>;
 }

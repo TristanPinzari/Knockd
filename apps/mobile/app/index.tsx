@@ -1,8 +1,9 @@
 import { Redirect, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountBar, TeamsLine } from "@/account/AccountBar";
+import { RecentSessions } from "@/account/RecentSessions";
 import { getAccountToken, useAccountStore } from "@/account/accountStore";
 import { sessionErrorMessage, useActiveSession } from "@/session";
 import { sessionLifecycle } from "@/session/defaultDeps";
@@ -51,77 +52,81 @@ export default function WelcomeScreen() {
   if (active) return <Redirect href="/live" />;
 
   return (
-    <Screen padTop style={styles.screen}>
-      <View style={[styles.brand, { marginTop: 24 }]}>
-        <Icon name="map-pin" size={24} color={colors.brand} />
-        <Text variant="title" style={{ flex: 1 }}>
-          Knockd
-        </Text>
-        <AccountBar />
-      </View>
-      <View style={styles.hero}>
-        <Text variant="title" style={styles.headline}>
-          See the whole map.
-        </Text>
-        <Text variant="body" color={colors.ink.secondary}>
-          Join your crew on one live map, mark houses as you walk, and see who covers what.
-        </Text>
-        <TeamsLine />
-      </View>
+    <Screen padTop>
+      <ScrollView contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
+        <View style={[styles.brand, { marginTop: 24 }]}>
+          <Icon name="map-pin" size={24} color={colors.brand} />
+          <Text variant="title" style={{ flex: 1 }}>
+            Knockd
+          </Text>
+          <AccountBar />
+        </View>
+        <View style={styles.hero}>
+          <Text variant="title" style={styles.headline}>
+            See the whole map.
+          </Text>
+          <Text variant="body" color={colors.ink.secondary}>
+            Join your crew on one live map, mark houses as you walk, and see who covers what.
+          </Text>
+          <TeamsLine />
+        </View>
 
-      <Text variant="label" color={colors.ink.secondary} style={styles.label}>
-        Join code
-      </Text>
-      <Pressable accessibilityLabel="Join code" onPress={() => inputRef.current?.focus()} style={styles.codeRow}>
-        {Array.from({ length: CODE_LENGTH }, (_, index) => (
-          <View key={index} style={[styles.codeBox, index === code.length && styles.codeBoxActive]}>
-            <Text variant="title">{code[index] ?? ""}</Text>
-          </View>
-        ))}
-      </Pressable>
-      <TextInput
-        ref={inputRef}
-        value={code}
-        onChangeText={(next) => {
-          setCode(sanitize(next));
-          setError(null);
-        }}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        maxLength={CODE_LENGTH}
-        style={styles.hiddenInput}
-      />
+        <Text variant="label" color={colors.ink.secondary} style={styles.label}>
+          Join code
+        </Text>
+        <Pressable accessibilityLabel="Join code" onPress={() => inputRef.current?.focus()} style={styles.codeRow}>
+          {Array.from({ length: CODE_LENGTH }, (_, index) => (
+            <View key={index} style={[styles.codeBox, index === code.length && styles.codeBoxActive]}>
+              <Text variant="title">{code[index] ?? ""}</Text>
+            </View>
+          ))}
+        </Pressable>
+        <TextInput
+          ref={inputRef}
+          value={code}
+          onChangeText={(next) => {
+            setCode(sanitize(next));
+            setError(null);
+          }}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={CODE_LENGTH}
+          style={styles.hiddenInput}
+        />
 
-      <Text variant="label" color={colors.ink.secondary} style={styles.label}>
-        Your name
-      </Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Enter your first name"
-        placeholderTextColor={colors.ink.muted}
-        style={styles.input}
-      />
-      {error ? (
-        <Text variant="label" color={colors.brand} accessibilityRole="alert" style={styles.error}>
-          {error}
+        <Text variant="label" color={colors.ink.secondary} style={styles.label}>
+          Your name
         </Text>
-      ) : null}
-      <Button
-        label={joining ? "Joining..." : "Join session"}
-        disabled={!canJoin}
-        onPress={() => void join()}
-        style={styles.join}
-      />
-      <View style={styles.orRow}>
-        <View style={styles.rule} />
-        <Text variant="label" color={colors.ink.muted}>
-          or
-        </Text>
-        <View style={styles.rule} />
-      </View>
-      <Button label="Start a session" variant="secondary" onPress={() => router.push("/create")} />
-      <View style={{ height: insets.bottom }} />
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Enter your first name"
+          placeholderTextColor={colors.ink.muted}
+          style={styles.input}
+        />
+        {error ? (
+          <Text variant="label" color={colors.brand} accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
+        ) : null}
+        <Button
+          label={joining ? "Joining..." : "Join session"}
+          disabled={!canJoin}
+          onPress={() => void join()}
+          style={styles.join}
+        />
+        <View style={styles.orRow}>
+          <View style={styles.rule} />
+          <Text variant="label" color={colors.ink.muted}>
+            or
+          </Text>
+          <View style={styles.rule} />
+        </View>
+        <Button label="Start a session" variant="secondary" onPress={() => router.push("/create")} />
+        <View style={{ height: 24 }} />
+        <RecentSessions />
+        <View style={{ height: insets.bottom }} />
+      </ScrollView>
     </Screen>
   );
 }

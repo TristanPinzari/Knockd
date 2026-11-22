@@ -70,6 +70,8 @@ export function memberFromApi(m: Member): CrewMember {
 interface CrewState {
   myMemberId: string | null;
   members: Readonly<Record<string, CrewMember>>;
+  /** The admin removed this phone's member from the session. */
+  removedMe: boolean;
   setMe: (memberId: string | null) => void;
   /** Snapshot: replaces the roster but keeps live speed for members we already track. */
   seed: (members: readonly Member[]) => void;
@@ -83,6 +85,7 @@ interface CrewState {
 export const useCrewStore = create<CrewState>()((set) => ({
   myMemberId: null,
   members: {},
+  removedMe: false,
   setMe: (myMemberId) => set({ myMemberId }),
   seed: (incoming) =>
     set((s) => ({
@@ -104,7 +107,7 @@ export const useCrewStore = create<CrewState>()((set) => ({
   memberLeft: (memberId) =>
     set((s) => {
       const { [memberId]: _gone, ...rest } = s.members;
-      return { members: rest };
+      return { members: rest, removedMe: s.removedMe || (s.myMemberId !== null && memberId === s.myMemberId) };
     }),
   setOnline: (memberId, online, nowMs) =>
     set((s) => {
@@ -126,5 +129,5 @@ export const useCrewStore = create<CrewState>()((set) => ({
       }
       return members === s.members ? s : { members };
     }),
-  reset: () => set({ myMemberId: null, members: {} }),
+  reset: () => set({ myMemberId: null, members: {}, removedMe: false }),
 }));

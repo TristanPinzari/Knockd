@@ -7,19 +7,29 @@ import { useAreaStore } from "@/area";
 import { useMyLocation } from "@/location";
 import { BYRON, type KnockdMapHandle } from "@/map";
 import { logger } from "@/realtime/logger";
-import { useCrewStore, useLeadsStore } from "@/realtime";
+import { useCrewStore, useLeadsStore, useLeaderboard } from "@/realtime";
+import { useOvertakeStore } from "@/realtime/stores/overtakeStore";
+import { passedCopy } from "@/session/teamProgress";
+import { TeamProgressSheet } from "@/ui/progress/TeamProgressSheet";
+import { ChatSheet } from "@/ui/chat/ChatSheet";
+import { useChatStore } from "@/realtime/stores/chatStore";
+import { usePinsStore } from "@/realtime/stores/pinsStore";
+import { PinSheet, type PinSheetMode } from "@/ui/live/PinSheet";
 import { sessionActions, useActiveSession } from "@/session";
 import { LocationNoticeBanner } from "@/session/LocationNoticeBanner";
 import { FieldCard } from "@/session/FieldCard";
+import { TeamLayersCard } from "@/session/TeamLayersCard";
 import { SessionSettingsCard } from "@/session/SessionSettingsCard";
 import { pendingLabel, useLiveStatus } from "@/session/useLiveStatus";
 import { colors, pill, shadows } from "@/theme";
 import {
   Avatar,
+  Badge,
   BottomSheet,
   HouseSheet,
   Icon,
   LeadAlertBanner,
+  PassedBanner,
   OfflinePill,
   RaisedRoundButton,
   Screen,
@@ -38,6 +48,7 @@ const DRAWING_TOOLS = new Set(["route", "freehand", "eraser"]);
 
 /** How long a teammate's lead alert stays up. */
 const LEAD_ALERT_MS = 5000;
+const PASSED_ALERT_MS = 6000;
 const CENTRE_ZOOM = 17;
 /** Top bar height before it has been measured (safe area aside). */
 const TOP_BAR_ESTIMATE = 76;
@@ -62,6 +73,17 @@ function useLeadAlert() {
   return alert;
 }
 
+/** "Sam passed you" on the leaderboard, for a few seconds. */
+function usePassedAlert() {
+  const latest = useOvertakeStore((s) => s.latest);
+  useEffect(() => {
+    if (!latest) return undefined;
+    const timer = setTimeout(() => useOvertakeStore.getState().dismiss(), PASSED_ALERT_MS);
+    return () => clearTimeout(timer);
+  }, [latest]);
+  return latest;
+}
+
 /**
  * Live map (MOBILE.md screen 6): everyone's dots and trails, houses and leads, and lead alerts.
  * Long-press a house to mark a lead.
@@ -75,6 +97,12 @@ export default function LiveMapScreen() {
   const myId = active?.memberId ?? null;
   const live = useLiveStatus();
   const alert = useLeadAlert();
+  const passed = usePassedAlert();
+  const leaderboard = useLeaderboard();
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pinSheet, setPinSheet] = useState<PinSheetMode | null>(null);
+  const unread = useChatStore((s) => s.unread);
   const { lngLat } = useMyLocation();
   const mapRef = useRef<KnockdMapHandle>(null);
   const [houseId, setHouseId] = useState<string | null>(null);
@@ -143,6 +171,18 @@ export default function LiveMapScreen() {
           setMessage(null);
           setHouseId(id);
         }}
+        onPinPress={(clientId) => {
+          const pin = usePinsStore.getState().pins[clientId];
+          if (!pin) return;
+          const by = crew[pin.memberId];
+          setPinSheet({
+            kind: "view",
+            pin,
+            byName: pin.memberId === myId ? "you" : (by?.name ?? "a teammate"),
+            byColour: by?.colour ?? colors.ink.muted,
+          });
+        }}
+        onMapLongPress={planning ? undefined : (at) => setPinSheet({ kind: "new", at })}
         planning={planning}
         onPlanTap={suggesting ? suggestMap.onTap : planningTools.onPlanTap}
         routesOverride={suggestMap.routes}
@@ -190,7 +230,9 @@ export default function LiveMapScreen() {
               </Text>
             </View>
             <Text variant="caption" color={colors.ink.muted} numberOfLines={1}>
-              {planning ? "Planning · everyone sees changes live" : "Long-press a house to mark a lead"}
+              {planning
+                ? "Planning · everyone sees changes live"
+                : "Long-press a house for a lead, or the map for a pin"}
             </Text>
           </View>
           <View style={styles.faces}>
@@ -211,9 +253,37 @@ export default function LiveMapScreen() {
           title={`${alert.memberName} just got ${alert.lead.grade === "A" ? "an" : "a"} ${alert.lead.grade} lead`}
           subtitle="It's on the map now"
         />
+      ) : passed ? (
+        <PassedBanner
+          top={top}
+          {...passedCopy(passed, leaderboard)}
+          onView={() => {
+            useOvertakeStore.getState().dismiss();
+            setProgressOpen(true);
+          }}
+        />
       ) : null}
 
       <View style={[styles.controls, { bottom: bottomGap }]}>
+        {planning ? null : (
+          <View>
+            <RaisedRoundButton
+              icon="message-circle"
+              size={44}
+              accessibilityLabel={unread ? `Crew chat, ${unread} unread` : "Crew chat"}
+              onPress={() => setChatOpen(true)}
+            />
+            <Badge count={unread} style={styles.unread} />
+          </View>
+        )}
+        {planning ? null : (
+          <RaisedRoundButton
+            icon="trophy"
+            size={44}
+            accessibilityLabel="Team progress"
+            onPress={() => setProgressOpen(true)}
+          />
+        )}
         {planning ? null : (
           <RaisedRoundButton
             icon="edit-3"
@@ -311,11 +381,30 @@ export default function LiveMapScreen() {
         />
       ) : null}
 
+      {progressOpen ? <TeamProgressSheet onClose={() => setProgressOpen(false)} /> : null}
+      {chatOpen ? <ChatSheet myId={myId} onClose={() => setChatOpen(false)} /> : null}
+      {pinSheet ? (
+        <PinSheet
+          mode={pinSheet}
+          onDrop={(label) => {
+            if (pinSheet.kind !== "new") return;
+            run("drop the pin", sessionActions.dropPin({ ...pinSheet.at, ...(label ? { label } : {}) }));
+            setPinSheet(null);
+          }}
+          onRemove={(clientId) => {
+            run("remove the pin", sessionActions.removePin(clientId));
+            setPinSheet(null);
+          }}
+          onClose={() => setPinSheet(null)}
+        />
+      ) : null}
+
       {menuOpen ? (
         <>
           <Pressable style={styles.scrim} onPress={() => setMenuOpen(false)} accessibilityLabel="Close menu" />
           <BottomSheet>
             <ScrollView>
+              <TeamLayersCard />
               <FieldCard />
               <SessionSettingsCard />
             </ScrollView>
@@ -345,6 +434,7 @@ const styles = StyleSheet.create({
   youRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   youDot: { width: 10, height: 10, borderRadius: 5 },
   controls: { position: "absolute", right: 16, gap: 12, alignItems: "center" },
+  unread: { top: -4, right: -4 },
   zoom: {
     width: 44,
     height: 88,

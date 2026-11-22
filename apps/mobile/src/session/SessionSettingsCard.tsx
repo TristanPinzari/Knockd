@@ -66,6 +66,21 @@ export function SessionSettingsCard() {
       <Card>
         <Pressable
           accessibilityRole="button"
+          onPress={() => router.push("/lobby")}
+          style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text variant="bodyStrong" style={{ fontSize: 15 }}>
+              Crew and join code
+            </Text>
+            <Text variant="caption" color={colors.ink.secondary}>
+              {active.isAdmin ? "Share the code, add simulated crew, remove people" : "Share the code with the crew"}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={20} color={colors.ink.muted} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           disabled={busy}
           onPress={confirm}
           style={{ flexDirection: "row", alignItems: "center" }}

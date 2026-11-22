@@ -10,6 +10,7 @@ import {
   GetMapsRes,
   GetMeRes,
   GetMessagesRes,
+  GetMySessionsRes,
   JoinSessionRes,
   PostLeadRes,
   PostMessageRes,
@@ -25,6 +26,7 @@ import {
   type DoorTimeRes as DoorTimeResT,
   type GetMapsRes as GetMapsResT,
   type GetMeRes as GetMeResT,
+  type GetMySessionsRes as GetMySessionsResT,
   type UploadSessionRes as UploadSessionResT,
   type JoinSessionBody,
   type JoinSessionRes as JoinSessionResT,
@@ -84,6 +86,8 @@ export interface ApiClient {
   /** Admin only. */
   endSession(sessionId: string, token: string): Promise<void>;
   leaveSession(sessionId: string, token: string): Promise<void>;
+  /** Admin only: removes a member and invalidates their session token. */
+  removeMember(sessionId: string, token: string, memberId: string): Promise<void>;
   /** Admin only. Starts `bots` simulated crew members (1 to 7). */
   startSim(sessionId: string, token: string, bots: number, pace: SimPace): Promise<StartSimResT>;
   stopSim(sessionId: string, token: string): Promise<void>;
@@ -96,6 +100,8 @@ export interface ApiClient {
   /** Your profile and teams (creates your user on the first call). */
   getMe(accountToken: string): Promise<GetMeResT>;
   getTeamMaps(teamId: string, accountToken: string): Promise<GetMapsResT>;
+  /** Your sessions from the last 7 days, including ones not added to a team yet. */
+  getMySessions(accountToken: string): Promise<GetMySessionsResT>;
   /** Adds an ended session you were in (while logged in) to one of your teams. Twice is harmless. */
   uploadSession(teamId: string, sessionId: string, accountToken: string): Promise<UploadSessionResT>;
 }
@@ -201,6 +207,13 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     endSession: (sessionId, token) => request({ method: "POST", path: `${base(sessionId)}/end`, token, schema: null }),
     leaveSession: (sessionId, token) =>
       request({ method: "POST", path: `${base(sessionId)}/leave`, token, schema: null }),
+    removeMember: (sessionId, token, memberId) =>
+      request({
+        method: "DELETE",
+        path: `${base(sessionId)}/members/${encodeURIComponent(memberId)}`,
+        token,
+        schema: null,
+      }),
     startSim: (sessionId, token, bots, pace) =>
       request({ method: "POST", path: `${base(sessionId)}/sim`, token, body: { bots, pace }, schema: StartSimRes }),
     stopSim: (sessionId, token) => request({ method: "DELETE", path: `${base(sessionId)}/sim`, token, schema: null }),
@@ -209,6 +222,8 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     getStats: (sessionId, token) =>
       request({ method: "GET", path: `${base(sessionId)}/stats`, token, schema: SessionStatsRes }),
     getMe: (accountToken) => request({ method: "GET", path: "/v1/me", token: accountToken, schema: GetMeRes }),
+    getMySessions: (accountToken) =>
+      request({ method: "GET", path: "/v1/me/sessions", token: accountToken, schema: GetMySessionsRes }),
     getTeamMaps: (teamId, accountToken) =>
       request({
         method: "GET",

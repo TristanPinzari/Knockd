@@ -2,6 +2,8 @@ import type { StyleProp, ViewStyle } from "react-native";
 import type { RouteProgressView } from "@/routes";
 import type { PlanGeo } from "@/plan/planGeo";
 import type { SuggestGeo } from "@/suggest/suggestView";
+import type { PinProps } from "./geo/pins";
+import type { TeamLayersGeo } from "./geo/teamLayers";
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
 
 export type TrailMode = "knocking" | "walking" | "driving";
@@ -52,6 +54,14 @@ export interface KnockdMapProps {
   planBlocks: FeatureCollection<Polygon, { blockId: number }> | null;
   /** Suggest: the walks to the meeting point, and the car and regroup pin. */
   suggest?: SuggestGeo;
+  /** The loaded team map's layers (read-only), already filtered to the ones switched on. */
+  team?: TeamLayersGeo;
+  /** Crew pins. */
+  pins?: FeatureCollection<Point, PinProps>;
+  /** Tap on a pin. */
+  onPinPress?: (clientId: string) => void;
+  /** Long-press on the map where there's no house (drop a pin). */
+  onMapLongPress?: (at: { lat: number; lng: number }) => void;
   /** House id → fill colour drawn over everything else (the Suggest selection). */
   houseHighlights?: Readonly<Record<string, string>>;
   onHousePress?: (houseId: string) => void;
