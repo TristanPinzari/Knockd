@@ -36,6 +36,9 @@ export default function EndOfDayScreen() {
           ) : null}
         </View>
 
+        {/* Right away, not after the stats: the server takes the upload as soon as the session has ended. */}
+        {finished ? <AddToTeam session={finished} /> : null}
+
         {!finished ? (
           <Text variant="body" color={colors.ink.secondary} style={styles.centre}>
             Nice work. There are no stats to show for this session on this phone.
@@ -72,7 +75,6 @@ export default function EndOfDayScreen() {
             {personRows(state.stats, state.members, finished.memberId).map((p) => (
               <PersonRow key={p.memberId} person={p} />
             ))}
-            <AddToTeam session={finished} />
           </>
         )}
       </ScrollView>

@@ -26,13 +26,14 @@ export function AddToTeam({
 }) {
   const { available, loggedIn, me } = useAccountStore();
   const [status, setStatus] = useState<Record<string, Status>>({});
-  if (!available) return null;
-
   const note = (text: string) => (
     <Text variant="label" color={colors.ink.muted} style={styles.note}>
       {text}
     </Text>
   );
+  // A build without the EXPO_PUBLIC_AUTH0_* settings can't log in at all: say so instead of showing nothing.
+  if (!available)
+    return compact ? null : note("This version of the app can't log in, so sessions can't be added to a team from it.");
   if (!loggedIn) return note("Log in before your next session to add it to your team's map.");
   if (!session.linked) return note("You weren't logged in when this session started, so it can't be added to a team.");
   if (!me) return null;
@@ -81,8 +82,8 @@ export function AddToTeam({
 }
 
 const styles = StyleSheet.create({
-  box: { marginTop: 20, gap: 10 },
+  box: { marginBottom: 20, gap: 10 },
   compactBox: { gap: 8 },
   row: { gap: 4 },
-  note: { marginTop: 16, textAlign: "center" },
+  note: { marginBottom: 16, textAlign: "center" },
 });
