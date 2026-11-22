@@ -4,7 +4,9 @@ import { colors } from "../theme";
 import { Avatar } from "../ui/Avatar";
 import { initialsOf } from "../ui/format";
 import { Text } from "../ui/Text";
+import { logger } from "../realtime/logger";
 import { useAccountStore } from "./accountStore";
+import { loginErrorMessage } from "./loginError";
 
 /**
  * Top-right of Welcome: "Log in", or your name (tap to log out). Logging in is optional: it's only
@@ -19,8 +21,11 @@ export function AccountBar() {
     setBusy(true);
     try {
       await what();
-    } catch {
-      // Closing the login page is a normal "cancel": nothing to show.
+    } catch (error) {
+      logger.warn("account: login or logout failed", error);
+      // Closing the login page is a normal "cancel": nothing to show. Anything else is shown.
+      const message = loginErrorMessage(error);
+      if (message) useAccountStore.getState().set({ error: message });
     } finally {
       setBusy(false);
     }

@@ -4,10 +4,12 @@ import { memo } from "react";
 import type { StyledTrailProps } from "../geo/trails";
 import { GHOST_OPACITY_FACTOR, modeIs, TRAIL_STYLES } from "./styles";
 import type { TrailMode } from "../types";
+import { useLabelsAnchor } from "../labelsAnchor";
 
 const MODES: TrailMode[] = ["driving", "walking", "knocking"]; // draw order: thickest on top
 
 function TrailLayersBase({ data }: { data: FeatureCollection<LineString, StyledTrailProps> }) {
+  const below = useLabelsAnchor();
   return (
     <GeoJSONSource id="knockd-trails" data={data}>
       {MODES.map((mode) => (
@@ -15,6 +17,7 @@ function TrailLayersBase({ data }: { data: FeatureCollection<LineString, StyledT
           key={mode}
           id={`knockd-trail-${mode}`}
           type="line"
+          beforeId={below}
           filter={modeIs(mode) as unknown as FilterSpecification}
           style={{
             lineColor: ["get", "colour"],

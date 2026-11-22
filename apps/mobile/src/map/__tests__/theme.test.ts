@@ -1,10 +1,18 @@
-import { applyKnockdTheme } from "../theme/applyKnockdTheme";
+import { LABELS_ANCHOR_ID } from "../constants";
+import { applyKnockdTheme, type StyleLayer } from "../theme/applyKnockdTheme";
 import { fixtureStyle } from "../testing/fixtures";
 
 const themed = applyKnockdTheme(fixtureStyle);
 const layer = (id: string) => themed.layers.find((l) => l.id === id)!;
 
 describe("applyKnockdTheme", () => {
+  it("adds an invisible marker right under the first label, so paths can be drawn below street names", () => {
+    const ids = themed.layers.map((l) => l.id);
+    const firstLabel = themed.layers.findIndex((l) => l.type === "symbol");
+    expect(ids[firstLabel - 1]).toBe(LABELS_ANCHOR_ID);
+    expect(layer(LABELS_ANCHOR_ID).layout).toEqual({ visibility: "none" });
+    expect(applyKnockdTheme({ layers: [] as StyleLayer[] }).layers.map((l) => l.id)).toEqual([LABELS_ANCHOR_ID]);
+  });
   it("does not mutate the input style", () => {
     expect(fixtureStyle.layers[0]!.paint).toEqual({ "background-color": "#cccccc" });
     expect(themed).not.toBe(fixtureStyle);

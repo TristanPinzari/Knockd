@@ -15,6 +15,7 @@ import { buildWorkArea, placeLeads, useAreaStore, useAreaSync } from "@/area";
 import { BYRON } from "@/map/constants";
 import { useCrewStore, useLeadsStore, useTrailsStore } from "@/realtime";
 import { buildRouteProgress, routePlanFromSharedPlan } from "@/routes";
+import { buildStreetIndex, cleanTrails, snapToStreet } from "@/trails/cleanTrails";
 import { useMyLocationStore } from "@/location/myLocationStore";
 import { useActiveSession } from "@/session";
 import { crewBadges, crewColours, SESSION_ZOOM, sessionCentre, toMapMembers } from "./liveMapData";
@@ -60,13 +61,16 @@ function useCrewColours(): Readonly<Record<string, string>> {
 /** Live session data from the backend stores. Each part only changes identity when its inputs do. */
 function useSessionMapData(myMemberId: string | null): LiveMapData {
   const crew = useCrewStore((s) => s.members);
-  const trails = useTrailsStore((s) => s.trailsGeoJSON);
+  const rawTrails = useTrailsStore((s) => s.trailsGeoJSON);
   const trailPoints = useTrailsStore((s) => s.pointsByMember);
   const leadsById = useLeadsStore((s) => s.leads);
   const area = useAreaStore((s) => s.area);
   const plannedArea = useAreaStore((s) => s.plannedArea);
   const plan = useAreaStore((s) => s.plan);
   const colours = useCrewColours();
+  // Trails drawn snapped to the streets as straight lines, not raw GPS wobble.
+  const streetIndex = useMemo(() => buildStreetIndex(area.streets), [area.streets]);
+  const trails = useMemo(() => cleanTrails(rawTrails, streetIndex), [rawTrails, streetIndex]);
 
   const workArea = useMemo(() => buildWorkArea(plan, area.blocks), [plan, area.blocks]);
   const centre = useMemo(() => sessionCentre(plannedArea, workArea) ?? BYRON, [plannedArea, workArea]);
@@ -74,7 +78,15 @@ function useSessionMapData(myMemberId: string | null): LiveMapData {
   const routes = useMemo(() => buildRouteProgress(routePlan, trailPoints), [routePlan, trailPoints]);
   const myFix = useMyLocationStore((s) => s.fix);
   const myPosition = useMemo(() => (myFix ? { lat: myFix.lat, lng: myFix.lng } : null), [myFix]);
-  const members = useMemo(() => toMapMembers(crew, myMemberId, myPosition), [crew, myMemberId, myPosition]);
+  // Pins sit on the nearest street, not in back yards or the middle of a block.
+  const members = useMemo(
+    () =>
+      toMapMembers(crew, myMemberId, myPosition).map((m) => {
+        const [lng, lat] = snapToStreet([m.lng, m.lat], streetIndex);
+        return { ...m, lng: lng!, lat: lat! };
+      }),
+    [crew, myMemberId, myPosition, streetIndex],
+  );
   const badges = useMemo(() => crewBadges(crew, myMemberId), [colours, myMemberId]); // eslint-disable-line react-hooks/exhaustive-deps
   // The loaded team map's layers, minus the ones this person switched off.
   const loadedLayers = useSessionStore((s) => s.loadedMap?.layers);

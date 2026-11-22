@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { colors, FONT_REGULAR, radii } from "@/theme";
 import { BottomSheet } from "../BottomSheet";
 import { Button } from "../Button";
@@ -24,33 +24,27 @@ export function NoteSheet({ initialText, editing, colour, onSave, onDelete, onCl
   return (
     <>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close note" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="box-none"
-      >
-        <BottomSheet>
-          <View style={styles.titleRow}>
-            <View style={[styles.dot, { backgroundColor: colour }]} />
-            <Text variant="heading">{editing ? "Edit note" : "New note"}</Text>
-          </View>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder='e.g. "Meet at the car at 7"'
-            placeholderTextColor={colors.ink.muted}
-            maxLength={NOTE_MAX}
-            autoFocus
-            multiline
-            style={styles.input}
-          />
-          <Text variant="caption" color={colors.ink.muted} style={styles.count}>
-            {trimmed.length}/{NOTE_MAX}
-          </Text>
-          <Button label="Save" disabled={!trimmed || trimmed === initialText.trim()} onPress={() => onSave(trimmed)} />
-          {editing ? <Button label="Delete note" variant="ghost" onPress={onDelete} style={styles.delete} /> : null}
-        </BottomSheet>
-      </KeyboardAvoidingView>
+      <BottomSheet>
+        <View style={styles.titleRow}>
+          <View style={[styles.dot, { backgroundColor: colour }]} />
+          <Text variant="heading">{editing ? "Edit note" : "New note"}</Text>
+        </View>
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          placeholder='e.g. "Meet at the car at 7"'
+          placeholderTextColor={colors.ink.muted}
+          maxLength={NOTE_MAX}
+          autoFocus
+          multiline
+          style={styles.input}
+        />
+        <Text variant="caption" color={colors.ink.muted} style={styles.count}>
+          {trimmed.length}/{NOTE_MAX}
+        </Text>
+        <Button label="Save" disabled={!trimmed || trimmed === initialText.trim()} onPress={() => onSave(trimmed)} />
+        {editing ? <Button label="Delete note" variant="ghost" onPress={onDelete} style={styles.delete} /> : null}
+      </BottomSheet>
     </>
   );
 }
