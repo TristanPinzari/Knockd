@@ -1,26 +1,73 @@
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef } from "react";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { config } from "./config";
+import { useTheme, type Theme } from "./theme";
+
+// MapLibre looks for its worker next to its own file, but Vite moves that file (dev and build),
+// so ship the worker as a file of its own and say where it is.
+maplibregl.setWorkerUrl(workerUrl);
 
 /** Byron, London: the demo area (densest residential spot). */
-const BYRON: [number, number] = [-81.3425, 42.955];
+export const BYRON: [number, number] = [-81.3425, 42.955];
 
-/** A full-size map with our own basemap (tiles served by the API). Layers get added on top later. */
-export function MapView() {
-  const container = useRef<HTMLDivElement>(null);
+const styleUrl = (theme: Theme) => `${config.apiUrl}/tiles/${theme === "dark" ? "style-dark" : "style"}.json`;
+
+/**
+ * Creates a MapLibre map with our basemap in `container`, in the current light/dark theme.
+ * Returns the map once its style has loaded, and `styleKey`, which changes every time a basemap
+ * finishes loading. Switching theme replaces the style, which removes any layers added on top:
+ * screens re-add theirs in MapLibre's "style.load" event, and reload their data when `styleKey` changes.
+ */
+export function useMap(container: RefObject<HTMLDivElement | null>, options: { interactive?: boolean } = {}) {
+  const { theme } = useTheme();
+  const [map, setMap] = useState<maplibregl.Map | null>(null);
+  const [styleKey, setStyleKey] = useState(0);
+  const interactive = options.interactive ?? true;
+  const initialTheme = useRef(theme);
 
   useEffect(() => {
     if (!container.current) return;
-    const map = new maplibregl.Map({
+    const m = new maplibregl.Map({
       container: container.current,
-      style: `${config.apiUrl}/tiles/style.json`,
+      style: styleUrl(initialTheme.current),
       center: BYRON,
       zoom: 15,
+      interactive,
+      attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
-    return () => map.remove();
-  }, []);
+    if (interactive) m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    m.on("style.load", () => setStyleKey((k) => k + 1));
+    // A server without the dark style (not deployed yet): fall back to the light basemap, once
+    // (the failed request can be reported more than once).
+    let fellBack = false;
+    m.on("error", (e) => {
+      const url = String((e.error as { url?: string } | undefined)?.url ?? "");
+      if (fellBack || !url.includes("/tiles/style-dark.json")) return;
+      fellBack = true;
+      m.setStyle(styleUrl("light"), { diff: false });
+    });
+    m.on("load", () => setMap(m));
+    return () => {
+      setMap(null);
+      m.remove();
+    };
+  }, [container, interactive]);
 
-  return <div ref={container} style={{ position: "absolute", inset: 0 }} />;
+  // Theme switched: load the other basemap (diff off, so it fully reloads and fires style.load).
+  useEffect(() => {
+    if (!map || initialTheme.current === theme) return;
+    initialTheme.current = theme;
+    map.setStyle(styleUrl(theme), { diff: false });
+  }, [map, theme]);
+
+  return { map, styleKey, theme };
+}
+
+/** A full-size map (e.g. behind the landing page). */
+export function MapView({ interactive = true }: { interactive?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useMap(ref, { interactive });
+  return <div ref={ref} className="map-canvas" />;
 }

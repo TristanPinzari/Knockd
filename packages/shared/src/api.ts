@@ -330,6 +330,8 @@ export const MapBlocksRes = z.object({
       housesWorked: z.number().int(),
       leads: GradeCounts,
       lastWorkedAt: Timestamp.nullable(),
+      /** The block's outline (simplified), so maps can draw worked blocks without loading every block. */
+      geometry: PolygonGeo,
     }),
   ),
 });

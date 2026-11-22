@@ -2,13 +2,14 @@
  * Basemap for MapLibre, from one Protomaps file (data/tiles/london.pmtiles, built into the image).
  *
  *   GET /tiles/style.json          ready-to-use MapLibre style (Protomaps "light"), XYZ source below
+ *   GET /tiles/style-dark.json     the same in Protomaps "dark" (the website's dark mode)
  *   GET /tiles/{z}/{x}/{y}.mvt     vector tiles read from the archive: works in any MapLibre,
  *                                  including React Native offline packs
  *   GET /tiles/london.pmtiles      the raw archive (HTTP range requests), for pmtiles:// on the web
  */
 import { open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import { PMTiles, type RangeResponse, type Source } from "pmtiles";
 import { env } from "../env";
@@ -52,13 +53,14 @@ const baseUrl = (req: Request) => `${req.protocol}://${req.get("host")}`;
 
 export const tilesRouter = Router();
 
-tilesRouter.get("/style.json", async (req, res) => {
+/** A MapLibre style for our tiles in one of Protomaps' flavours. */
+const styleHandler = (flavor: "light" | "dark") => async (req: Request, res: Response) => {
   const header = await (await getArchive()).getHeader();
   res.set("Cache-Control", "public, max-age=3600").json({
     version: 8,
-    name: "Knockd London",
+    name: flavor === "dark" ? "Knockd London (dark)" : "Knockd London",
     glyphs: `${ASSETS}/fonts/{fontstack}/{range}.pbf`,
-    sprite: `${ASSETS}/sprites/v4/light`,
+    sprite: `${ASSETS}/sprites/v4/${flavor}`,
     sources: {
       protomaps: {
         type: "vector",
@@ -69,9 +71,12 @@ tilesRouter.get("/style.json", async (req, res) => {
         attribution: ATTRIBUTION,
       },
     },
-    layers: layers("protomaps", namedFlavor("light"), { lang: "en" }),
+    layers: layers("protomaps", namedFlavor(flavor), { lang: "en" }),
   });
-});
+};
+
+tilesRouter.get("/style.json", styleHandler("light"));
+tilesRouter.get("/style-dark.json", styleHandler("dark"));
 
 tilesRouter.get("/:z/:x/:file", async (req, res, next) => {
   const match = /^(\d+)\.mvt$/.exec(req.params.file);

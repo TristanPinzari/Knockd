@@ -301,7 +301,7 @@ People who accept an invite join as **viewers**.
 ### `POST /v1/teams` 👤
 
 ```ts
-{ name } → { team }      // creator becomes owner
+{ name } → { team }      // creator becomes owner; the team starts with a "World Map" (no boundary)
 ```
 
 ### `GET /v1/teams/:id` 👤 · `PATCH /v1/teams/:id` 🛡️ (owner) · `DELETE /v1/teams/:id` 🛡️ (owner)
@@ -379,7 +379,7 @@ Newest first. The client calculates visibility (duration × age) using the team'
 ### `GET /v1/maps/:id/blocks?bbox=&asOf=` 👤
 
 ```ts
-→ { blocks: { blockId, rate | null, housesWorked, leads: { A, B, C }, lastWorkedAt | null }[] }
+→ { blocks: { blockId, rate | null, housesWorked, leads: { A, B, C }, lastWorkedAt | null, geometry }[] }   // geometry: the block outline (simplified GeoJSON)
 // Only blocks with results. rate = (A + B + 15 × teamRate) / (housesWorked + 15), smoothed toward the
 // map's average; null (grey) until 15 houses have been worked. C leads don't count.
 ```
@@ -451,6 +451,10 @@ The basemap for MapLibre: OpenStreetMap data from Protomaps, cut to London (zoom
 ```ts
 <MapView mapStyle="https://api.knockd.rodeo/tiles/style.json" />
 ```
+
+### `GET /tiles/style-dark.json` 🔓
+
+The same basemap in Protomaps' dark flavour (the website's dark mode).
 
 ### `GET /tiles/{z}/{x}/{y}.mvt` 🔓
 

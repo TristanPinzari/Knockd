@@ -174,17 +174,29 @@ export async function mapBlocks(m: MapRow, bbox: Bbox, asOf?: string): Promise<M
     WHERE s.session_id IN ${scopeSessions(m, asOf)} ${inBoundary(m, sql`b.geom`)}`);
   const teamRate = team && team.hw > 0 ? team.ab / team.hw : 0;
 
-  const rows = await db.execute<{ block_id: number; hw: number; a: number; b: number; c: number; last: Date | null }>(
+  const rows = await db.execute<{
+    block_id: number;
+    hw: number;
+    a: number;
+    b: number;
+    c: number;
+    last: Date | null;
+    geom: MapBlocksRes["blocks"][number]["geometry"];
+  }>(
     sql`
-      SELECT s.block_id, sum(s.houses_worked)::int AS hw,
-             sum(s.leads_a)::int AS a, sum(s.leads_b)::int AS b, sum(s.leads_c)::int AS c,
-             max(s.last_worked_at) AS last
-      FROM session_block_stats s JOIN blocks bl ON bl.id = s.block_id
-      WHERE s.session_id IN ${scopeSessions(m, asOf)}
-        AND bl.geom && ${env}
-        ${inBoundary(m, sql`bl.geom`)}
-      GROUP BY s.block_id
-      LIMIT ${MAX_FEATURES}`,
+      WITH worked AS (
+        SELECT s.block_id, sum(s.houses_worked)::int AS hw,
+               sum(s.leads_a)::int AS a, sum(s.leads_b)::int AS b, sum(s.leads_c)::int AS c,
+               max(s.last_worked_at) AS last
+        FROM session_block_stats s JOIN blocks bl ON bl.id = s.block_id
+        WHERE s.session_id IN ${scopeSessions(m, asOf)}
+          AND bl.geom && ${env}
+          ${inBoundary(m, sql`bl.geom`)}
+        GROUP BY s.block_id
+        LIMIT ${MAX_FEATURES}
+      )
+      SELECT w.*, ST_AsGeoJSON(ST_SimplifyPreserveTopology(bl.geom, 0.000005), 6)::json AS geom
+      FROM worked w JOIN blocks bl ON bl.id = w.block_id`,
   );
   return {
     blocks: rows.map((r) => ({
@@ -196,6 +208,7 @@ export async function mapBlocks(m: MapRow, bbox: Bbox, asOf?: string): Promise<M
       housesWorked: r.hw,
       leads: { A: r.a, B: r.b, C: r.c },
       lastWorkedAt: r.last ? new Date(r.last).toISOString() : null,
+      geometry: r.geom,
     })),
   };
 }

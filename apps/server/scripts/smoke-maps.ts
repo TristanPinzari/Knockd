@@ -67,7 +67,15 @@ const login = (await (
 const token = login.access_token;
 const teamId: string = (await call("POST", "/v1/teams", { name: "Smoke Maps" }, token)).json.team.id;
 
-const world = await call("POST", `/v1/teams/${teamId}/maps`, { name: "World Map" }, token);
+// New teams come with a "World Map" (no boundary).
+const starting = await call("GET", `/v1/teams/${teamId}/maps`, undefined, token);
+check(
+  "a new team starts with a World Map (no boundary)",
+  starting.json?.maps?.length === 1 &&
+    starting.json.maps[0].name === "World Map" &&
+    starting.json.maps[0].boundary === null,
+);
+const world = { status: 201, json: { map: starting.json.maps[0] } };
 const byronBoundary = {
   type: "Polygon",
   coordinates: [
@@ -100,7 +108,7 @@ const downtown = await call(
   token,
 );
 check(
-  "create maps: World (no boundary), Byron, Downtown",
+  "create maps: Byron, Downtown (next to World)",
   world.status === 201 && byron.json?.map?.boundary?.type === "MultiPolygon" && downtown.status === 201,
 );
 const W = `/v1/maps/${world.json.map.id}`;

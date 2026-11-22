@@ -2,7 +2,22 @@
 
 The website at **https://knockd.rodeo**: team maps, stats, highlights and notes, "where next?". What it does is in the [README](../README.md#web-app-phase-2); the API it calls is in [API.md](API.md).
 
-> **Status:** skeleton only. It signs in with Auth0, calls `GET /v1/me` and shows our London basemap. The screens come once the design is agreed.
+> **Built:** sign-in, your teams (and making one), invite links, and the team map: maps as tabs, lead-rate blocks, fading paths, A/B leads, highlights and notes, stats, recent sessions, a time slider, and people (invite, roles, remove, leave). Owners and editors mark the map: **Highlight a road** (drag along streets), **Circle an area** (drag a loop; one that crosses itself is saved as its outline), **Add a note** (click, up to 140 characters), and delete any of them from its popup. **Not yet:** "where next?", session replay.
+
+## Look
+
+Map-first, like a ride app: the map fills the screen and everything else floats on it in white cards with big rounded corners, bold Inter type, pill buttons and one pink accent (`--accent` in [src/styles.css](../apps/web/src/styles.css), where all the design tokens live). On phones the side panel becomes a bottom sheet. **Dark mode** follows the computer's setting until you click the moon/sun button, which flips light and dark (remembered in the browser). The dark map comes from `/tiles/style-dark.json`, and the map layers switch to light lines on the dark basemap ([src/theme.ts](../apps/web/src/theme.ts), `themed()` in [src/map/layers.ts](../apps/web/src/map/layers.ts)).
+
+## Screens
+
+| Route                        | Screen                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| (signed out)                 | Landing: the map behind one card with Log in / Create an account                     |
+| `/`                          | Your teams, and starting a new one                                                   |
+| `/invite/:token`             | Joins the team from an invite link (after signing in, if needed), then opens its map |
+| `/teams/:teamId/maps/:mapId` | The team map. `/teams/:teamId` opens the first map                                   |
+
+On the team map, data loads for what's on screen from city-wide zoom (9) inwards: only worked blocks come back (with their outlines), so a whole-city view stays small. Block colours compare the blocks on screen (worst red, middle yellow, best green; grey until 15 houses are worked), because real lead rates are small (a few %) and fixed thresholds would paint everything red. Paths fade by duration × age using the team's `fadeDays`.
 
 ## Stack
 
@@ -16,9 +31,14 @@ The website at **https://knockd.rodeo**: team maps, stats, highlights and notes,
 ```
 apps/web/
   src/
-    main.tsx      Auth0 provider + app root
-    App.tsx       skeleton page (replace with the real screens)
-    MapView.tsx   full-size MapLibre map with our basemap
+    main.tsx      router + Auth0 (returns you to the page you opened after login)
+    App.tsx       routes
+    styles.css    design tokens and components (buttons, pills, cards, panel, time bar)
+    ui.tsx        small shared pieces (Logo, Avatar, Stat, Modal, formatting)
+    MapView.tsx   useMap(): MapLibre with our basemap
+    map/layers.ts team map layers: blocks, paths, leads, highlights, notes
+    map/draw.ts   freehand highlighter strokes and loops, note clicks
+    pages/        Landing, Teams, AcceptInvite, TeamMap, MembersDialog
     api.ts        useApi(): fetch with the signed-in user's token, typed errors
     config.ts     VITE_* settings from .env
   Dockerfile      build → nginx (for Coolify)
@@ -47,7 +67,7 @@ The website needs its own Auth0 application (the phone's is a Native app with di
    - **Allowed Web Origins:** `https://knockd.rodeo, http://localhost:5173`
 3. **Advanced Settings → Grant Types**: make sure **Refresh Token** is ticked, and under **Refresh Token Rotation** turn rotation on (the site keeps people signed in with refresh tokens)
 4. Copy the **Client ID** into `VITE_AUTH0_CLIENT_ID` (local `.env`, and the Coolify build argument below). It isn't secret
-5. If the API (`https://api.knockd.rodeo`) has an application access policy for user tokens, allow the new application there too
+5. **Let it call the API.** Applications → APIs → Knockd API (`https://api.knockd.rodeo`) → **Application Access** → Knockd Web → Edit → **User Access: Authorized**. Without this, sign-in fails with _Client "…" is not authorized to access resource server "https://api.knockd.rodeo"_
 
 ### DNS
 
