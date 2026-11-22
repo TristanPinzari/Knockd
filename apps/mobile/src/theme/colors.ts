@@ -1,6 +1,4 @@
-import { byScheme } from "./scheme";
-
-/** App colours. Light: Knockd brand. Dark: near-black greys with a bright orange accent (ride-share app reference). */
+/** App colour palettes. The active one comes from the theme (see themes.ts). */
 export interface Palette {
   readonly bg: { readonly page: string; readonly card: string; readonly map: string };
   readonly ink: {
@@ -49,27 +47,25 @@ export const lightColors: Palette = {
   shadow: "#0B1B2B",
 };
 
+/** Night: navy-slate surfaces matching the dark map, with a softened orange accent. */
 export const darkColors: Palette = {
-  // Near-black greys, thin grey outlines and a bright orange accent (ride-share app reference).
-  bg: { page: "#0E0F11", card: "#1B1C1F", map: "#1A1A24" },
-  ink: { primary: "#F5F5F6", secondary: "#9B9EA4", muted: "#686B71", onBrand: "#FFFFFF" },
-  border: { default: "#303236", soft: "#232528" },
-  brand: "#FF5A1F",
-  brandTint: "rgba(255, 90, 31, 0.18)",
+  bg: { page: "#121821", card: "#1B2330", map: "#18202B" },
+  ink: { primary: "#E9EDF3", secondary: "#929CAC", muted: "#5F6979", onBrand: "#FFFFFF" },
+  border: { default: "#2E3846", soft: "#222B38" },
+  // The orange at 88% so it reads a touch softer on navy than the light theme's red-orange.
+  brand: "rgba(240, 130, 60, 0.88)",
+  brandTint: "rgba(240, 130, 60, 0.16)",
   routeBlue: "#6FB0FF",
   // Brighter crew colours so routes and houses read on the dark map.
-  crew: { blue: "#4D94FF", green: "#2FD27A", purple: "#A47DFF", pink: "#F25AB0" },
-  map: { park: "#1D3A2B", road: "#3B3752", roadEdge: "#2A2738", hairline: "#2A2836", label: "#B9B6CA" },
-  status: { ok: "#2FD27A", amber: "#F2B636" },
-  track: "#2A2C30",
-  disabledFill: "#24262A",
-  blueTint: "#1E2228",
+  crew: { blue: "#4D94FF", green: "#3DD68C", purple: "#A47DFF", pink: "#F25AB0" },
+  map: { park: "#1C3A2C", road: "#2B3442", roadEdge: "#1E2632", hairline: "#242D3A", label: "#8C96A6" },
+  status: { ok: "#3DD68C", amber: "#F2B636" },
+  track: "#273040",
+  disabledFill: "#222B38",
+  blueTint: "#1C2A3C",
   scrim: "rgba(0, 0, 0, 0.6)",
-  gradeFills: ["#3A1D12", "#7A3214", "#C2461A"],
+  gradeFills: ["#3A2A1E", "#6E3F1E", "#B0602A"],
   shadow: "#000000",
 };
 
-export const colors: Palette = byScheme({ light: lightColors, dark: darkColors });
-
 export type CrewColourKey = keyof Palette["crew"];
-export const CREW_COLOURS: readonly string[] = Object.values(colors.crew);

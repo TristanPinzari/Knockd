@@ -1,5 +1,5 @@
 import type { ViewStyle } from "react-native";
-import { colors } from "./colors";
+import { colors } from "./themes";
 
 const shadowColour = colors.shadow;
 

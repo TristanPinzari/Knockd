@@ -1,75 +1,9 @@
-import { byScheme } from "@/theme/scheme";
+import { theme } from "@/theme/themes";
 
-/** Knockd map design tokens (see Figma tokens in the brief). */
-export interface MapColours {
-  readonly land: string;
-  readonly park: string;
-  readonly water: string;
-  readonly building: string;
-  readonly roadFill: string;
-  /** Highways and major roads (stand out from minor streets on the dark map). */
-  readonly roadMajor: string;
-  readonly roadEdge: string;
-  readonly hairline: string;
-  readonly label: string;
-  readonly brand: string;
-  readonly houseFill: string;
-  readonly houseOutline: string;
-  readonly ghostTrail: string;
-  readonly white: string;
-  /** Under the dashed routes. */
-  readonly routeCasing: string;
-  /** Door number badges before they're knocked. */
-  readonly badgeFill: string;
-  readonly badgeText: string;
-  /** The car (where routes start). */
-  readonly start: string;
-}
+export { DARK_MAP_COLOURS, LIGHT_MAP_COLOURS, type MapColours } from "@/theme/mapPalettes";
 
-export const LIGHT_MAP_COLOURS: MapColours = {
-  land: "#F6F7F9",
-  park: "#DDEFE2",
-  water: "#E3ECF5",
-  building: "#EEF0F3",
-  roadFill: "#FFFFFF",
-  roadMajor: "#FFFFFF",
-  roadEdge: "#DFE3E8",
-  hairline: "#ECEEF2",
-  label: "#9AA3AD",
-  brand: "#E2381F",
-  houseFill: "#FFFFFF",
-  houseOutline: "#B9C0C8",
-  ghostTrail: "#B9C0C8",
-  white: "#FFFFFF",
-  routeCasing: "#FFFFFF",
-  badgeFill: "#FFFFFF",
-  badgeText: "#1F2328",
-  start: "#111827",
-};
-
-/** Night map: navy land, lavender-grey roads, deep green parks (dark map reference). */
-export const DARK_MAP_COLOURS: MapColours = {
-  land: "#1A1A24",
-  park: "#1D3A2B",
-  water: "#1C2B4A",
-  building: "#23222E",
-  roadFill: "#35314A",
-  roadMajor: "#5A5378",
-  roadEdge: "#24222F",
-  hairline: "#2A2836",
-  label: "#B9B6CA",
-  brand: "#FF5A1F",
-  houseFill: "#2B2938",
-  houseOutline: "#45415A",
-  ghostTrail: "#5B5870",
-  white: "#FFFFFF",
-  routeCasing: "#121216",
-  badgeFill: "#1B1C1F",
-  badgeText: "#F4F4F5",
-  start: "#F4F4F5",
-};
-
-export const COLOURS: MapColours = byScheme({ light: LIGHT_MAP_COLOURS, dark: DARK_MAP_COLOURS });
+/** Map colours for the active theme (see src/theme/themes.ts). */
+export const COLOURS = theme.map;
 
 export const OUTSKIRTS_OPACITY = 0.12;
 /** Below this zoom the outskirts tint is fully visible; it fades out by FADE_END. */

@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
+import { AppearanceCard } from "@/session/AppearanceCard";
 import { SessionSettingsCard } from "@/session/SessionSettingsCard";
 import { colors } from "@/theme";
 import { Button, Card, FlatHeader, Icon, Screen, SectionLabel, SegmentedControl, Switch, Text } from "@/ui";
@@ -21,6 +22,9 @@ export default function SettingsScreen() {
       <FlatHeader title="Settings" showBack={false} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <SessionSettingsCard />
+
+        <SectionLabel>Appearance</SectionLabel>
+        <AppearanceCard />
 
         <SectionLabel>Offline map</SectionLabel>
         <Card>
