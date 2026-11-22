@@ -10,6 +10,7 @@ import { logger } from "@/realtime/logger";
 import { useCrewStore, useLeadsStore } from "@/realtime";
 import { sessionActions, useActiveSession } from "@/session";
 import { LocationNoticeBanner } from "@/session/LocationNoticeBanner";
+import { FieldCard } from "@/session/FieldCard";
 import { SessionSettingsCard } from "@/session/SessionSettingsCard";
 import { pendingLabel, useLiveStatus } from "@/session/useLiveStatus";
 import { colors, pill, shadows } from "@/theme";
@@ -315,6 +316,7 @@ export default function LiveMapScreen() {
           <Pressable style={styles.scrim} onPress={() => setMenuOpen(false)} accessibilityLabel="Close menu" />
           <BottomSheet>
             <ScrollView>
+              <FieldCard />
               <SessionSettingsCard />
             </ScrollView>
           </BottomSheet>

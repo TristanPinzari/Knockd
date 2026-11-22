@@ -3,6 +3,9 @@ import { create } from "zustand";
 interface SessionUiState {
   sessionLive: boolean;
   crewOn: boolean;
+  /** Battery saver: record GPS less often (every ~25 m, sent every 30 s). */
+  batterySaver: boolean;
+  setBatterySaver: (on: boolean) => void;
   setSessionLive: (live: boolean) => void;
   setCrewOn: (on: boolean) => void;
 }
@@ -11,6 +14,8 @@ interface SessionUiState {
 export const useSessionUi = create<SessionUiState>((set) => ({
   sessionLive: false,
   crewOn: false,
+  batterySaver: false,
+  setBatterySaver: (batterySaver) => set({ batterySaver }),
   setSessionLive: (sessionLive) => set({ sessionLive }),
   setCrewOn: (crewOn) => set({ crewOn }),
 }));

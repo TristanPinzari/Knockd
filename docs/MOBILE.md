@@ -281,6 +281,12 @@ Don't use double-tap: that zooms the map.
 
 Offline map download for the session area, and a battery-saving option (record less often).
 
+**Built** (step 10) as an "In the field" card in the Live map's menu, not a separate screen:
+
+- **Battery saver** switch: GPS mode `saver` (balanced accuracy, every ~25 m, sent every 30 s) instead of `standard` (every ~10 m, every 15 s). Switching restarts tracking cleanly
+- **Offline map:** the status of the automatic download ("Downloading the area: 42%", "Saved", or "Couldn't download")
+- The outbox (pings, leads, pins, messages) was already saved on the phone in SQLite, so it survives no signal and an app restart
+
 ---
 
 ## 5. How-tos
@@ -413,6 +419,8 @@ To see what it should look like, open [suggest-viewer.html](suggest-viewer.html)
 ### Offline map tiles
 
 The tiles are standard XYZ (`/tiles/{z}/{x}/{y}.mvt`), so MapLibre's offline manager can download a pack. Download the working area's bounds at zooms 12–16 on session start, while there's signal, and the new ring when the area grows.
+
+**Built** (`src/map/useOfflineArea.ts`, `planSessionPack` / `ensureSessionPack` in `src/map/offline.ts`, tested): 5 s after the session centre is known or the area grows, the phone downloads the area plus 300 m as one pack named after the session and radius. Packs from older sessions, and this session's smaller one, are deleted, so only today's area is kept.
 
 ---
 
