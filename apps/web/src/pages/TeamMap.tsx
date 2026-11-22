@@ -1,4 +1,7 @@
+import { HIGHLIGHT_COLOURS } from "@knockd/shared";
 import type {
+  CreateHighlightBody,
+  CreateTeamNoteBody,
   GetHighlightsRes,
   GetMapsRes,
   GetMeRes,
@@ -16,6 +19,7 @@ import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApi } from "../api";
+import { addDraftLayer, cleanRing, useDrawing, type DrawTool } from "../map/draw";
 import { addLayers, COLOURS, setBlocks, setHighlights, setLeads, setNotes, setPaths } from "../map/layers";
 import { useMap } from "../MapView";
 import { ago, km, pct, shortDate, Stat, ThemeToggle } from "../ui";
@@ -43,6 +47,13 @@ export function TeamMap() {
   const [loadingLayers, setLoadingLayers] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
 
+  // Marking the map (owners and editors): a highlighter stroke, a loop around an area, or a note.
+  const [tool, setTool] = useState<DrawTool | null>(null);
+  const [colour, setColour] = useState<string>(HIGHLIGHT_COLOURS[0]);
+  const [noteAt, setNoteAt] = useState<{ lat: number; lng: number } | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [saving, setSaving] = useState(false);
+
   // Time slider: null = now. `slider` moves instantly; `asOf` follows it after a short pause.
   const [slider, setSlider] = useState<number | null>(null);
   const [asOf, setAsOf] = useState<number | null>(null);
@@ -52,6 +63,7 @@ export function TeamMap() {
   }, [slider]);
 
   const current = maps.find((m) => m.id === mapId) ?? null;
+  const canEdit = role === "owner" || role === "editor";
 
   // ---------- Team, role, maps, sessions ----------
   useEffect(() => {
@@ -91,6 +103,7 @@ export function TeamMap() {
     if (!map) return;
     const add = () => {
       if (!map.getSource("blocks")) addLayers(map, theme);
+      addDraftLayer(map);
     };
     try {
       add();
@@ -165,11 +178,77 @@ export function TeamMap() {
     };
   }, [map, loadLayers, styleKey]);
 
+  // ---------- Marking the map ----------
+  const save = useCallback(
+    async (path: string, body: CreateHighlightBody | CreateTeamNoteBody) => {
+      setSaving(true);
+      try {
+        await api(path, { method: "POST", body: JSON.stringify(body) });
+        await loadLayers();
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [api, loadLayers],
+  );
+  useDrawing(map, tool, colour, {
+    onLine: (coordinates) =>
+      save(`/v1/teams/${teamId}/highlights`, {
+        geometry: { type: "LineString", coordinates },
+        colour: colour as CreateHighlightBody["colour"],
+      }),
+    onArea: (ring) =>
+      save(`/v1/teams/${teamId}/highlights`, {
+        geometry: { type: "Polygon", coordinates: [cleanRing(ring)] },
+        colour: colour as CreateHighlightBody["colour"],
+      }),
+    onPoint: (at) => {
+      setNoteAt(at);
+      setNoteText("");
+    },
+  });
+  const saveNote = async () => {
+    if (!noteAt || !noteText.trim()) return;
+    await save(`/v1/teams/${teamId}/notes`, { ...noteAt, text: noteText.trim() });
+    setNoteAt(null);
+    setNoteText("");
+  };
+
+  // A pin where the note will go.
+  useEffect(() => {
+    if (!map || !noteAt) return;
+    const marker = new maplibregl.Marker({ color: "#e8007f" }).setLngLat([noteAt.lng, noteAt.lat]).addTo(map);
+    return () => {
+      marker.remove();
+    };
+  }, [map, noteAt]);
+
+  // Esc stops drawing.
+  useEffect(() => {
+    if (!tool) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setTool(null);
+      setNoteAt(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tool]);
+
+  // Popups need the latest of these without re-binding every click handler.
+  const live = useRef({ tool, canEdit, api, loadLayers });
+  useEffect(() => {
+    live.current = { tool, canEdit, api, loadLayers };
+  });
+
   // ---------- Popups ----------
   useEffect(() => {
     if (!map) return;
     const popup = new maplibregl.Popup({ closeButton: false, maxWidth: "260px", offset: 8 });
     const show = (html: string) => (e: maplibregl.MapLayerMouseEvent) => {
+      if (live.current.tool) return;
       const p = e.features?.[0]?.properties;
       if (p)
         popup
@@ -177,12 +256,40 @@ export function TeamMap() {
           .setHTML(html.replace(/\{(\w+)\}/g, (_, k) => escape(String(p[k] ?? ""))))
           .addTo(map);
     };
+    /** A note or highlight: who made it, and Delete for owners and editors. */
+    const marking = (e: maplibregl.MapLayerMouseEvent, kind: "notes" | "highlights") => {
+      const p = e.features?.[0]?.properties;
+      if (!p || live.current.tool) return;
+      e.originalEvent.stopPropagation();
+      const el = document.createElement("div");
+      el.innerHTML =
+        (kind === "notes" ? `<b>${escape(String(p.text ?? ""))}</b><br>` : "<b>Highlight</b><br>") +
+        `<span style="color:var(--muted)">${escape(String(p.by ?? ""))} · ${ago(String(p.at))}</span>`;
+      if (live.current.canEdit) {
+        const del = document.createElement("button");
+        del.className = "btn btn-secondary btn-sm";
+        del.style.marginTop = "10px";
+        del.textContent = "Delete";
+        del.onclick = async () => {
+          del.disabled = true;
+          try {
+            await live.current.api(`/v1/${kind}/${p.id}`, { method: "DELETE" });
+            popup.remove();
+            await live.current.loadLayers();
+          } catch (err) {
+            del.textContent = (err as Error).message;
+          }
+        };
+        el.append(document.createElement("br"), del);
+      }
+      popup.setLngLat(e.lngLat).setDOMContent(el).addTo(map);
+    };
     const handlers: [string, (e: maplibregl.MapLayerMouseEvent) => void][] = [
       [
         "blocks-fill",
         (e) => {
           const p = e.features?.[0]?.properties;
-          if (!p) return;
+          if (!p || live.current.tool) return;
           const leads = JSON.parse(String(p.leads ?? "{}")) as { A: number; B: number; C: number };
           const rate = p.rate === null || p.rate === undefined || p.rate === "null" ? null : Number(p.rate);
           popup
@@ -195,12 +302,14 @@ export function TeamMap() {
         },
       ],
       ["leads", show("<b>{grade} lead</b><br>{note}")],
-      ["notes", show("<b>{text}</b><br><span style='color:#7a7988'>{by}</span>")],
+      ["notes", (e) => marking(e, "notes")],
+      ["highlights-line", (e) => marking(e, "highlights")],
+      ["highlights-fill", (e) => marking(e, "highlights")],
       [
         "paths",
         (e) => {
           const p = e.features?.[0]?.properties;
-          if (!p) return;
+          if (!p || live.current.tool) return;
           popup
             .setLngLat(e.lngLat)
             .setHTML(
@@ -299,6 +408,88 @@ export function TeamMap() {
             </>
           )}
 
+          {canEdit && (
+            <>
+              <div className="section-title">Mark the map</div>
+              <div className="pills">
+                {(
+                  [
+                    ["line", "Highlight a road"],
+                    ["area", "Circle an area"],
+                    ["note", "Add a note"],
+                  ] as const
+                ).map(([t, label]) => (
+                  <button
+                    key={t}
+                    className={`pill ${tool === t ? "on" : ""}`}
+                    onClick={() => {
+                      setTool(tool === t ? null : t);
+                      setNoteAt(null);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {(tool === "line" || tool === "area") && (
+                <>
+                  <div className="row" style={{ margin: "12px 0 6px", gap: 8 }}>
+                    {HIGHLIGHT_COLOURS.map((c) => (
+                      <button
+                        key={c}
+                        aria-label={`Colour ${c}`}
+                        onClick={() => setColour(c)}
+                        style={{
+                          width: 30,
+                          height: 30,
+                          borderRadius: 99,
+                          background: c,
+                          border: 0,
+                          cursor: "pointer",
+                          boxShadow: colour === c ? "0 0 0 3px var(--surface), 0 0 0 5px var(--ink)" : "none",
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="muted small">
+                    {tool === "line" ? "Drag along the streets to highlight them." : "Drag a loop around the area."}{" "}
+                    {saving ? "Saving…" : "Esc or the button again to stop."} Colours have no set meaning: your team
+                    decides.
+                  </p>
+                </>
+              )}
+              {tool === "note" && !noteAt && (
+                <p className="muted small" style={{ marginTop: 10 }}>
+                  Click the map where the note goes.
+                </p>
+              )}
+              {tool === "note" && noteAt && (
+                <div style={{ marginTop: 10 }}>
+                  <input
+                    className="input"
+                    autoFocus
+                    maxLength={140}
+                    placeholder="e.g. Gate code 1234, dog at #12"
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && saveNote()}
+                  />
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <button className="btn btn-primary btn-sm" disabled={!noteText.trim() || saving} onClick={saveNote}>
+                      Save note
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setNoteAt(null)}>
+                      Cancel
+                    </button>
+                    <span className="muted small grow" style={{ textAlign: "right" }}>
+                      {noteText.length}/140
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           <div className="section-title">On the map</div>
           <div className="legend">
             <span>
@@ -348,6 +539,17 @@ export function TeamMap() {
           ))}
         </div>
       </div>
+
+      {error && team && (
+        <div className="card toast" role="alert">
+          <span className="grow small" style={{ fontWeight: 600 }}>
+            {error}
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={() => setError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {(zoomedOut || loadingLayers) && (
         <div className="card float-top-right" style={{ padding: "10px 16px", borderRadius: 999 }}>

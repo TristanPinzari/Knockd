@@ -2,7 +2,7 @@
 
 The website at **https://knockd.rodeo**: team maps, stats, highlights and notes, "where next?". What it does is in the [README](../README.md#web-app-phase-2); the API it calls is in [API.md](API.md).
 
-> **Built:** sign-in, your teams (and making one), invite links, and the team map: maps as tabs, lead-rate blocks, fading paths, A/B leads, highlights and notes (shown, not drawn yet), stats, recent sessions, a time slider, and people (invite, roles, remove, leave). **Not yet:** drawing highlights and notes, "where next?", session replay.
+> **Built:** sign-in, your teams (and making one), invite links, and the team map: maps as tabs, lead-rate blocks, fading paths, A/B leads, highlights and notes, stats, recent sessions, a time slider, and people (invite, roles, remove, leave). Owners and editors mark the map: **Highlight a road** (drag along streets), **Circle an area** (drag a loop; one that crosses itself is saved as its outline), **Add a note** (click, up to 140 characters), and delete any of them from its popup. **Not yet:** "where next?", session replay.
 
 ## Look
 
@@ -37,6 +37,7 @@ apps/web/
     ui.tsx        small shared pieces (Logo, Avatar, Stat, Modal, formatting)
     MapView.tsx   useMap(): MapLibre with our basemap
     map/layers.ts team map layers: blocks, paths, leads, highlights, notes
+    map/draw.ts   freehand highlighter strokes and loops, note clicks
     pages/        Landing, Teams, AcceptInvite, TeamMap, MembersDialog
     api.ts        useApi(): fetch with the signed-in user's token, typed errors
     config.ts     VITE_* settings from .env

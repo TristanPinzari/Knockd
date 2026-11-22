@@ -406,6 +406,27 @@ select.input {
   font-size: 14px;
 }
 
+/* Errors on the map screen: a card at the top, clear of the panel. */
+.toast {
+  position: absolute;
+  top: 16px;
+  left: calc(16px + 380px + 16px);
+  right: 16px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 10px 10px 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-left: 4px solid var(--bad);
+}
+@media (max-width: 720px) {
+  .toast {
+    left: 8px;
+    right: 8px;
+  }
+}
+
 /* Legend */
 .legend {
   display: flex;
