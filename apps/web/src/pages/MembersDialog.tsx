@@ -1,4 +1,3 @@
-import { useAuth0 } from "@auth0/auth0-react";
 import type { CreateInviteRes, GetMeRes, GetTeamMembersRes, TeamRole } from "@knockd/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +8,6 @@ import { Avatar, Modal, shortDate, Spinner } from "../ui";
 export function MembersDialog({ teamId, myRole, onClose }: { teamId: string; myRole: TeamRole; onClose: () => void }) {
   const api = useApi();
   const navigate = useNavigate();
-  const { user } = useAuth0();
   const [members, setMembers] = useState<GetTeamMembersRes["members"] | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
   const [invite, setInvite] = useState<CreateInviteRes | null>(null);
@@ -134,7 +132,7 @@ export function MembersDialog({ teamId, myRole, onClose }: { teamId: string; myR
             }
           }}
         >
-          Leave team{user?.name ? ` (${user.name})` : ""}
+          Leave team
         </button>
       )}
     </Modal>

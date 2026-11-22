@@ -35,7 +35,8 @@ apps/web/
     App.tsx       routes
     styles.css    design tokens and components (buttons, pills, cards, panel, time bar)
     ui.tsx        small shared pieces (Logo, Avatar, Stat, Modal, formatting)
-    MapView.tsx   useMap(): MapLibre with our basemap
+    MapView.tsx   useMap(): MapLibre with our basemap (light/dark), middle-button drag to pan
+    theme.ts      light/dark mode: follows the computer until the moon/sun button is used
     map/layers.ts team map layers: blocks, paths, leads, highlights, notes
     map/draw.ts   freehand highlighter strokes and loops, note clicks
     pages/        Landing, Teams, AcceptInvite, TeamMap, MembersDialog

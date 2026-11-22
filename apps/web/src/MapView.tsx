@@ -10,7 +10,7 @@ import { useTheme, type Theme } from "./theme";
 maplibregl.setWorkerUrl(workerUrl);
 
 /** Byron, London: the demo area (densest residential spot). */
-export const BYRON: [number, number] = [-81.3425, 42.955];
+const BYRON: [number, number] = [-81.3425, 42.955];
 
 const styleUrl = (theme: Theme) => `${config.apiUrl}/tiles/${theme === "dark" ? "style-dark" : "style"}.json`;
 
@@ -74,35 +74,48 @@ export function useMap(container: RefObject<HTMLDivElement | null>, options: { i
  */
 function middleButtonPan(map: maplibregl.Map): () => void {
   const el = map.getCanvasContainer();
-  let last: { x: number; y: number } | null = null;
+  let drag: { id: number; x: number; y: number } | null = null;
 
-  const down = (e: MouseEvent) => {
+  // Pointer events with capture: every move of this drag comes here, whatever the map library
+  // does with its own mouse handling.
+  const down = (e: PointerEvent) => {
     if (e.button !== 1) return;
     e.preventDefault(); // no autoscroll
-    last = { x: e.clientX, y: e.clientY };
+    e.stopPropagation();
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    el.setPointerCapture(e.pointerId);
     el.style.cursor = "grabbing";
   };
-  const move = (e: MouseEvent) => {
-    if (!last) return;
-    map.panBy([last.x - e.clientX, last.y - e.clientY], { duration: 0 });
-    last = { x: e.clientX, y: e.clientY };
+  const move = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    e.preventDefault();
+    const dx = drag.x - e.clientX;
+    const dy = drag.y - e.clientY;
+    drag = { ...drag, x: e.clientX, y: e.clientY };
+    if (dx || dy) map.panBy([dx, dy], { animate: false });
   };
-  const up = (e: MouseEvent) => {
-    if (e.button !== 1 || !last) return;
-    last = null;
+  const end = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (el.hasPointerCapture(drag.id)) el.releasePointerCapture(drag.id);
+    drag = null;
     el.style.cursor = "";
   };
-  const noAux = (e: MouseEvent) => e.button === 1 && e.preventDefault();
+  // Some browsers also open autoscroll on mousedown / paste on middle click: stop both on the map.
+  const noMiddle = (e: MouseEvent) => e.button === 1 && e.preventDefault();
 
-  el.addEventListener("mousedown", down);
-  el.addEventListener("auxclick", noAux);
-  window.addEventListener("mousemove", move);
-  window.addEventListener("mouseup", up);
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointermove", move);
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+  el.addEventListener("mousedown", noMiddle);
+  el.addEventListener("auxclick", noMiddle);
   return () => {
-    el.removeEventListener("mousedown", down);
-    el.removeEventListener("auxclick", noAux);
-    window.removeEventListener("mousemove", move);
-    window.removeEventListener("mouseup", up);
+    el.removeEventListener("pointerdown", down);
+    el.removeEventListener("pointermove", move);
+    el.removeEventListener("pointerup", end);
+    el.removeEventListener("pointercancel", end);
+    el.removeEventListener("mousedown", noMiddle);
+    el.removeEventListener("auxclick", noMiddle);
   };
 }
 
