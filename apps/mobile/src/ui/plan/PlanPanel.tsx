@@ -53,6 +53,7 @@ export interface PlanPanelProps {
   readonly onUndo: () => void;
   readonly onRedo: () => void;
   readonly onClearMine: () => void;
+  readonly onSuggest: () => void;
   readonly onDone: () => void;
   readonly onLayout?: (e: LayoutChangeEvent) => void;
 }
@@ -143,6 +144,7 @@ export function PlanPanel(props: PlanPanelProps) {
         <IconButton icon="corner-up-right" accessibilityLabel="Redo" disabled={!props.canRedo} onPress={props.onRedo} />
         <IconButton icon="trash-2" accessibilityLabel="Clear mine" onPress={confirmClear} />
         <View style={{ flex: 1 }} />
+        <Button label="Suggest" variant="smallOutline" onPress={props.onSuggest} style={styles.done} />
         <Button label="Done" variant="small" onPress={props.onDone} style={styles.done} />
       </View>
     </BottomSheet>

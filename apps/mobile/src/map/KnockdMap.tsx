@@ -20,6 +20,7 @@ import { MemberPin } from "./layers/MemberPin";
 import { OutskirtsLayer } from "./layers/OutskirtsLayer";
 import { BLOCKS_HIT_LAYER_ID, NOTES_HIT_LAYER_ID, PlanBlocks, PlanLines, PlanNotes } from "./layers/PlanLayers";
 import { RouteBadges, RouteLines } from "./layers/RouteLayers";
+import { SuggestMarkers, SuggestWalks } from "./layers/SuggestLayers";
 import { TrailLayers } from "./layers/TrailLayers";
 import type { Bounds, KnockdMapHandle, KnockdMapProps } from "./types";
 import { useKnockdStyle } from "./useKnockdStyle";
@@ -41,6 +42,8 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
     showCrewPaths,
     plan,
     planBlocks,
+    suggest,
+    houseHighlights,
     onHousePress,
     onHouseLongPress,
     onPlanTap,
@@ -68,7 +71,11 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
     [houses],
   );
   const routeData = useMemo(() => buildRouteLayers(shownRoutes, colours, centres), [shownRoutes, colours, centres]);
-  const houseData = useMemo(() => buildHouseLayers(houses, routeData.houseColours), [houses, routeData.houseColours]);
+  const houseColours = useMemo(
+    () => (houseHighlights ? { ...routeData.houseColours, ...houseHighlights } : routeData.houseColours),
+    [routeData.houseColours, houseHighlights],
+  );
+  const houseData = useMemo(() => buildHouseLayers(houses, houseColours), [houses, houseColours]);
   // With a plan, progress shows as slug trails along the routes; raw GPS trails only without one.
   const hasPlan = routes.groups.length > 0;
   const trailData = useMemo(() => styleTrails(trails, members, showCrewPaths), [trails, members, showCrewPaths]);
@@ -157,9 +164,11 @@ export const KnockdMap = forwardRef<KnockdMapHandle, KnockdMapProps>(function Kn
       {hasPlan ? null : <TrailLayers data={trailData} />}
       <RouteLines data={routeData} />
       <PlanLines plan={plan} />
+      {suggest ? <SuggestWalks data={suggest} /> : null}
       <HouseLayers houses={houseData} leads={leadData} />
       <RouteBadges data={routeData} />
       <PlanNotes plan={plan} />
+      {suggest ? <SuggestMarkers data={suggest} /> : null}
       {members.map((m) => (
         <MemberPin key={m.memberId} member={m} />
       ))}

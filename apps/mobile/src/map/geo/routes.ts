@@ -5,7 +5,7 @@
  */
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import type { LatLng } from "@knockd/shared";
-import { slice, type RouteProgressView } from "@/routes";
+import { slice, uTurnPoints, type RouteProgressView } from "@/routes";
 import { COLOURS } from "../constants";
 
 /** One member's stripe of a group's line: dash `slot` of `count` (see routeDashes in layers/styles). */
@@ -36,6 +36,8 @@ export interface RouteLayerData {
   done: FeatureCollection<LineString, RouteStripeProps>;
   badges: FeatureCollection<Point, BadgeProps>;
   start: FeatureCollection<Point>;
+  /** Every place a route turns back on itself (always marked). */
+  uTurns: FeatureCollection<Point, { colour: string }>;
   /** House id → fill colour, for every planned door. */
   houseColours: Readonly<Record<string, string>>;
 }
@@ -63,10 +65,13 @@ export function buildRouteLayers(
   const n = view.groups.length;
   const todo: Feature<LineString, RouteStripeProps>[] = [];
   const done: Feature<LineString, RouteStripeProps>[] = [];
+  const uTurns: Feature<Point, { colour: string }>[] = [];
 
   view.groups.forEach(({ group, line: measured, progressM }, i) => {
     const offset = (i - (n - 1) / 2) * ROUTE_SPACING_PX;
     casing.push(...line(group.route, { offset }));
+    const colour = colourOf(group.memberIds[0] ?? "");
+    for (const at of uTurnPoints(group.route)) uTurns.push(point(at, { colour }));
     const walked = slice(measured, 0, progressM);
     const left = slice(measured, progressM, measured.lengthM);
     group.memberIds.forEach((memberId, slot) => {
@@ -91,6 +96,7 @@ export function buildRouteLayers(
     done: { type: "FeatureCollection", features: done },
     badges: { type: "FeatureCollection", features: badges },
     start: { type: "FeatureCollection", features: view.start ? [point(view.start, {})] : [] },
+    uTurns: { type: "FeatureCollection", features: uTurns },
     houseColours,
   };
 }

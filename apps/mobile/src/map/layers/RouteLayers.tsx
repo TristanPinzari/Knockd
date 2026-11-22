@@ -12,6 +12,7 @@ import {
   routeDashes,
   SLUG_WIDTH,
   slugDashes,
+  zoomWidth,
 } from "./styles";
 
 const stripeIs = (slot: number, count: number) =>
@@ -95,35 +96,64 @@ function RouteLinesBase({ data }: LinesProps) {
   );
 }
 
-/** A disc on every planned door: plain, ringed in the knocker's colour, filled once they've passed it. */
+/**
+ * A disc on every planned door: plain, ringed in the knocker's colour, filled once they've passed it.
+ * Plus a "U" badge wherever a route turns back on itself.
+ */
 function RouteBadgesBase({ data }: LinesProps) {
   return (
-    <GeoJSONSource id="knockd-route-badges" data={data.badges}>
-      <Layer
-        id="knockd-route-badge"
-        type="circle"
-        minzoom={BADGE_MIN_ZOOM}
-        style={{
-          circleRadius: BADGE_RADIUS,
-          circleColor: ["case", ["get", "knocked"], ["get", "colour"], COLOURS.badgeFill],
-          circleStrokeColor: ["case", ["get", "knocked"], COLOURS.badgeFill, ["get", "colour"]],
-          circleStrokeWidth: 2,
-        }}
-      />
-      <Layer
-        id="knockd-route-badge-number"
-        type="symbol"
-        minzoom={BADGE_MIN_ZOOM}
-        style={{
-          textField: ["to-string", ["get", "n"]],
-          textFont: BADGE_FONT,
-          textSize: BADGE_TEXT_SIZE,
-          textColor: ["case", ["get", "knocked"], COLOURS.white, COLOURS.badgeText],
-          textAllowOverlap: true,
-          textIgnorePlacement: true,
-        }}
-      />
-    </GeoJSONSource>
+    <>
+      <GeoJSONSource id="knockd-route-uturns" data={data.uTurns}>
+        <Layer
+          id="knockd-route-uturn"
+          type="circle"
+          style={{
+            circleRadius: zoomWidth([14, 7], [17, 10], [19, 13]),
+            circleColor: COLOURS.badgeFill,
+            circleStrokeColor: ["get", "colour"],
+            circleStrokeWidth: 3,
+          }}
+        />
+        <Layer
+          id="knockd-route-uturn-label"
+          type="symbol"
+          style={{
+            textField: "U",
+            textFont: BADGE_FONT,
+            textSize: zoomWidth([14, 9], [17, 12], [19, 15]),
+            textColor: ["get", "colour"],
+            textAllowOverlap: true,
+            textIgnorePlacement: true,
+          }}
+        />
+      </GeoJSONSource>
+      <GeoJSONSource id="knockd-route-badges" data={data.badges}>
+        <Layer
+          id="knockd-route-badge"
+          type="circle"
+          minzoom={BADGE_MIN_ZOOM}
+          style={{
+            circleRadius: BADGE_RADIUS,
+            circleColor: ["case", ["get", "knocked"], ["get", "colour"], COLOURS.badgeFill],
+            circleStrokeColor: ["case", ["get", "knocked"], COLOURS.badgeFill, ["get", "colour"]],
+            circleStrokeWidth: 2,
+          }}
+        />
+        <Layer
+          id="knockd-route-badge-number"
+          type="symbol"
+          minzoom={BADGE_MIN_ZOOM}
+          style={{
+            textField: ["to-string", ["get", "n"]],
+            textFont: BADGE_FONT,
+            textSize: BADGE_TEXT_SIZE,
+            textColor: ["case", ["get", "knocked"], COLOURS.white, COLOURS.badgeText],
+            textAllowOverlap: true,
+            textIgnorePlacement: true,
+          }}
+        />
+      </GeoJSONSource>
+    </>
   );
 }
 

@@ -27,6 +27,9 @@ import { LiveMap, useLiveMapData } from "@/ui/liveMap";
 import { usePlanEditor } from "@/plan/planEditor";
 import { usePlanning, type NoteDraft } from "@/plan/usePlanning";
 import { DrawOverlay, NoteSheet, PlanPanel } from "@/ui/plan";
+import { SuggestPanelContainer } from "@/suggest/SuggestPanelContainer";
+import { useSuggestStore } from "@/suggest/suggestStore";
+import { BRUSH_RADIUS_PX, useSuggestMap } from "@/suggest/useSuggestMap";
 
 /** Tools that draw with one finger (the map then doesn't move). */
 const DRAWING_TOOLS = new Set(["route", "freehand", "eraser"]);
@@ -86,6 +89,13 @@ export default function LiveMapScreen() {
   const [panelHeight, setPanelHeight] = useState(0);
   const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
   const planningTools = usePlanning(mapRef, myId, setNoteDraft);
+  // Suggest (a planning tool with its own panel): brush houses, compare options, use one.
+  const suggesting = planning && tool === "suggest";
+  const suggestMap = useSuggestMap(mapRef, suggesting);
+  const suggestBrush = useSuggestStore((s) => s.brush);
+  const pickingOption = useSuggestStore((s) => s.options !== null);
+  const brushing = suggesting && !pickingOption && (suggestBrush === "add" || suggestBrush === "remove");
+  const suggestMessage = useSuggestStore((s) => s.message);
 
   const lead = useMemo(() => leadOnHouse(leads, houseId), [leads, houseId]);
   const markedBy = lead && lead.memberId !== myId ? (crew[lead.memberId]?.name ?? "a teammate") : null;
@@ -114,7 +124,7 @@ export default function LiveMapScreen() {
   };
 
   const pending = pendingLabel(live.pending);
-  const toast = planMessage ?? message ?? pending;
+  const toast = (suggesting ? suggestMessage : null) ?? planMessage ?? message ?? pending;
   // Banners sit just under the top bar, whatever its height.
   const top = (barHeight || insets.top + TOP_BAR_ESTIMATE) + BANNER_GAP;
   // Buttons and the toast sit above the planning panel while it's open.
@@ -132,13 +142,25 @@ export default function LiveMapScreen() {
           setHouseId(id);
         }}
         planning={planning}
-        onPlanTap={planningTools.onPlanTap}
+        onPlanTap={suggesting ? suggestMap.onTap : planningTools.onPlanTap}
+        routesOverride={suggestMap.routes}
+        suggest={suggesting ? suggestMap.geo : undefined}
+        houseHighlights={suggestMap.highlights}
       />
+      {brushing ? (
+        <DrawOverlay
+          colour={suggestBrush === "add" ? colors.brand : colors.ink.secondary}
+          width={BRUSH_RADIUS_PX * 2}
+          opacity={0.25}
+          onStroke={suggestMap.onBrushStroke}
+        />
+      ) : null}
       {planning && DRAWING_TOOLS.has(tool) ? (
         <DrawOverlay
           colour={tool === "eraser" ? colors.ink.secondary : planningTools.inkColour}
           dashed={tool === "route"}
-          eraser={tool === "eraser"}
+          width={tool === "eraser" ? 28 : 4}
+          opacity={tool === "eraser" ? 0.35 : 1}
           onStroke={planningTools.onStroke}
         />
       ) : null}
@@ -220,6 +242,7 @@ export default function LiveMapScreen() {
           onPress={() => {
             setMessage(null);
             usePlanEditor.getState().setMessage(null);
+            useSuggestStore.setState({ message: null });
           }}
           style={[styles.toast, { bottom: bottomGap }]}
         >
@@ -229,7 +252,13 @@ export default function LiveMapScreen() {
         </Pressable>
       ) : null}
 
-      {planning ? (
+      {suggesting ? (
+        <SuggestPanelContainer
+          onBack={() => usePlanEditor.getState().setTool("move")}
+          onApplied={() => usePlanEditor.getState().setTool("move")}
+          onLayout={(e) => setPanelHeight(e.nativeEvent.layout.height)}
+        />
+      ) : planning ? (
         <PlanPanel
           tool={tool}
           ink={planningTools.ink}
@@ -242,6 +271,7 @@ export default function LiveMapScreen() {
           onUndo={() => myId && void usePlanEditor.getState().undo(myId)}
           onRedo={() => myId && void usePlanEditor.getState().redo(myId)}
           onClearMine={planningTools.clearMine}
+          onSuggest={() => usePlanEditor.getState().setTool("suggest")}
           onDone={() => usePlanEditor.getState().setPlanning(false)}
           onLayout={(e) => setPanelHeight(e.nativeEvent.layout.height)}
         />

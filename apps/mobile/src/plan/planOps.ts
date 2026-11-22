@@ -16,7 +16,7 @@ import {
   type PlanEditOp,
 } from "@knockd/shared";
 
-export type PlanTool = "move" | "claim" | "route" | "freehand" | "note" | "eraser";
+export type PlanTool = "move" | "claim" | "route" | "freehand" | "note" | "eraser" | "suggest";
 
 /** Who a drawing, note or claim is for: a crew member (their colour) or a utility colour. */
 export type Ink =
