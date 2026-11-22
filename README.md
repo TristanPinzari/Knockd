@@ -13,6 +13,31 @@ This README covers the project scope. Technical docs:
 
 ---
 
+## What Inspired Us
+
+I (Tristan) used to sell door to door, and I lived every pain point in this README myself: losing track of teammates, knocking doors someone already did, texting "where are you?", and planning the day by drawing on a screenshot of Google Maps. I'm also a software engineer, which puts me in an unusual spot: I know exactly what the customer wants because I was the customer, and I'm also the one building it.
+
+## How We Built It
+
+We went step by step, and took our time at each one so nothing would go wrong later:
+
+1. **Idea → scope:** what the app does, and just as importantly what it doesn't (no CRM, no manager dashboard)
+2. **Scope → structure:** three apps sharing one package of types and logic: `apps/mobile` (the crew's phone app), `apps/web` (the team map), `apps/server` (the API), and `packages/shared`
+3. **Structure → stack:** Expo and React Native for the phone, MapLibre for maps on both phone and web, Tiger Data (Postgres with TimescaleDB and PostGIS) for GPS points and map data, Auth0 for accounts, Socket.io for live updates, all hosted on Vultr
+4. **Stack → code**
+
+## Challenges
+
+**1. Planning routes people actually want to walk.** A key feature of the phone app is Suggest: select an area and it works out the best way for the crew to knock it. The hard part isn't raw speed. The routes also have to be simple and intuitive for a person to follow, and that changes what "best" looks like. On top of that come real door-to-door tactics: leapfrogging (two people on one side of the street taking turns, house by house) to get more done, and the fact that crossing the road takes time, so the planner penalises every crossing. Balancing all of that took many rounds of comparing its routes with ones we drew by hand.
+
+**2. Turning rough GPS into a polished experience.** GPS is at the core of the app, and it's naturally noisy: points jump around, drift, and drop out. We turn it into clean trails, streets marked as worked or just walked past, and blocks that fill in as the crew covers them. Tiger Data made this possible: TimescaleDB stores and summarises the stream of GPS points, and PostGIS matches the points to real streets and blocks.
+
+## What We Learned
+
+For me (Tristan), it was my first time building a mobile app, and my first time working with maps and location data. Jasmine gained a lot more experience with backend development.
+
+---
+
 ## The Problem
 
 Small door-to-door crews (2–8 people) split up to cover more ground, then lose track of each other:
