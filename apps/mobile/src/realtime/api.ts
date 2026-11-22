@@ -14,6 +14,7 @@ import {
   PostPingsRes,
   PostPinRes,
   SessionSnapshotRes,
+  SessionStatsRes,
   StartSimRes,
   TrailsRes,
   type CreateSessionBody,
@@ -34,6 +35,7 @@ import {
   type PostPinBody,
   type PostPinRes as PostPinResT,
   type SessionSnapshotRes as SessionSnapshotResT,
+  type SessionStatsRes as SessionStatsResT,
   type TrailsRes as TrailsResT,
 } from "@knockd/shared";
 import { ApiRequestError, NetworkError, ResponseShapeError } from "./errors";
@@ -81,6 +83,8 @@ export interface ApiClient {
   stopSim(sessionId: string, token: string): Promise<void>;
   /** Seconds per door for Suggest (the default until it is learned from team history). */
   getDoorTime(sessionId: string, token: string): Promise<DoorTimeResT>;
+  /** Leaderboard during the session; end-of-day stats once it has been processed. */
+  getStats(sessionId: string, token: string): Promise<SessionStatsResT>;
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -189,5 +193,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     stopSim: (sessionId, token) => request({ method: "DELETE", path: `${base(sessionId)}/sim`, token, schema: null }),
     getDoorTime: (sessionId, token) =>
       request({ method: "GET", path: `${base(sessionId)}/door-time`, token, schema: DoorTimeRes }),
+    getStats: (sessionId, token) =>
+      request({ method: "GET", path: `${base(sessionId)}/stats`, token, schema: SessionStatsRes }),
   };
 }

@@ -32,4 +32,5 @@ export const sessionLifecycle = createSessionLifecycle({
   getApi: async () => (await getRuntime()).api,
   stopTracking,
   resetStores: resetLiveStores,
+  flush: async (active) => (await getRuntime()).flusher.flush(active.sessionId, active.token),
 });

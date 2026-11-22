@@ -261,6 +261,12 @@ Don't use double-tap: that zooms the map.
 3. **Add to team:** for logged-in users who were in the session while logged in, list their teams: "Add to High Five Painting?" → `POST /v1/teams/:teamId/sessions` with `{ sessionId }` (account token). Uploading twice is harmless
 4. Clear the saved active session
 
+**Built** (step 8, except Add to team, which needs login from step 9):
+
+- **Ending:** the admin's End session first sends whatever is still queued (pings, leads), then calls `POST /end`. Other phones get `session:ended` and also send their queue. Sending gives up after 8 s, so no signal never blocks the screen. The session is then kept as the "finished session" (`src/session/finishedSessionStore.ts`, in memory) so the End of day screen can still use its token
+- **End of day** (`app/end.tsx`): "Wrapping up…" while it polls `GET /stats` every 3 s until `final` (up to a minute, then shows the estimates with a note). Then six crew tiles (houses covered, leads by grade, streets worked and passed, blocks completed, distance, active time) and one row per person, best leads first, with "(you)" highlighted. People who left show as "A teammate"
+- Code: `src/session/endOfDay.ts` (rows and labels, tested), `useEndOfDay.ts` (loading), the ending order in `lifecycle.ts` (tested)
+
 ### Settings
 
 Offline map download for the session area, and a battery-saving option (record less often).
