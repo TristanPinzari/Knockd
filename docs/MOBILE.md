@@ -169,19 +169,19 @@ Planning edits are **not** queued (they need a connection; see Planning).
 
 The pages, in the order a user meets them:
 
-| #   | Page                                        | Purpose                                                                                                                                             |
-| --- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Welcome**                                 | Log in, or join a session with a code and just a name (no account)                                                                                  |
-| 2   | **Home**                                    | Your teams, get back into an active session, start or join one. Logged-in users also see recent sessions not uploaded yet                           |
-| 3   | **Create session**                          | Pick the area (pin + radius, or draw it). Logged in: optionally load a team map's data (past leads, coverage, lead-rate colours, highlights, notes) |
-| 4   | **Join**                                    | Enter the 6-character code and your name. Clear errors for a wrong code, a full session or an ended one                                             |
-| 5   | **Lobby**                                   | The join code to share, and who's in, each in their colour. The creator (session admin) can remove people or add the simulated crew                 |
-| 6   | **Live map** (the main screen)              | Everyone's dots and trails, houses and blocks, leads, pins, the plan, lead alerts. Chat (a panel) and dropping pins happen here                     |
-| 7   | **Plan** (a mode of the live map)           | Plan together: colour picker, claim blocks, route, freehand, note, eraser, undo/redo, clear mine, plus the house brush and Suggest                  |
-| 8   | **House sheet** (pops up from a long-press) | Grade a lead A/B/C with undo, add a short note, see past lead info ("A lead · 8 months ago")                                                        |
-| 9   | **Team progress**                           | In-session leaderboard (leads per person by grade) and coverage so far                                                                              |
-| 10  | **End of day**                              | Stats per person and for the crew, and "Add to team?" for logged-in users                                                                           |
-| 11  | **Settings**                                | Download the area's map for offline use, and battery-saving mode                                                                                    |
+| #   | Page                                        | Purpose                                                                                                                                                                     |
+| --- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Welcome**                                 | Log in, or join a session with a code and just a name (no account)                                                                                                          |
+| 2   | **Home**                                    | Your teams, get back into an active session, start or join one. Logged-in users also see recent sessions not uploaded yet                                                   |
+| 3   | **Create session**                          | Your name, then Create. No area to pick (see "The session area"). Logged in: optionally load a team map's data (past leads, coverage, lead-rate colours, highlights, notes) |
+| 4   | **Join**                                    | Enter the 6-character code and your name. Clear errors for a wrong code, a full session or an ended one                                                                     |
+| 5   | **Lobby**                                   | The join code to share, and who's in, each in their colour. The creator (session admin) can remove people or add the simulated crew                                         |
+| 6   | **Live map** (the main screen)              | Everyone's dots and trails, houses and blocks, leads, pins, the plan, lead alerts. Chat (a panel) and dropping pins happen here                                             |
+| 7   | **Plan** (a mode of the live map)           | Plan together: colour picker, claim blocks, route, freehand, note, eraser, undo/redo, clear mine, plus the house brush and Suggest                                          |
+| 8   | **House sheet** (pops up from a long-press) | Grade a lead A/B/C with undo, add a short note, see past lead info ("A lead · 8 months ago")                                                                                |
+| 9   | **Team progress**                           | In-session leaderboard (leads per person by grade) and coverage so far                                                                                                      |
+| 10  | **End of day**                              | Stats per person and for the crew, and "Add to team?" for logged-in users                                                                                                   |
+| 11  | **Settings**                                | Download the area's map for offline use, and battery-saving mode                                                                                                            |
 
 For each page below: what it shows, and the calls it makes.
 
@@ -198,9 +198,9 @@ For each page below: what it shows, and the calls it makes.
 ### Create session
 
 1. Name (prefilled from the account)
-2. **Area:** drop a pin and pick a radius (100–3,000 m), or draw a polygon
+2. **No area step.** The app sends a 400 m circle around where the host is standing (see "The session area"). Without a location fix, say location is needed and don't create the session
 3. Logged in, optional: pick a team map, and which layers to load (`leads` on by default; `coverage`, `leadRate`, `highlights`, `notes`)
-4. `POST /v1/sessions` with `{ displayName, location, area, loadMap? }`, plus the account token if logged in
+4. `POST /v1/sessions` with `{ displayName, location, area: { kind: "circle", center: location, radiusM: 400 }, loadMap? }`, plus the account token if logged in
 5. Save `{ session, member, token }` from the response → Lobby
 
 ### Join
@@ -269,6 +269,16 @@ Offline map download for the session area, and a battery-saving option (record l
 
 ## 5. How-tos
 
+### The session area
+
+Users never pick, see or think about the area. It's only how the app decides which houses to load and which houses Suggest plans over.
+
+- **Start:** a circle of `MIN_AREA_RADIUS_M` (400 m) around the host when they create the session. That's what `POST /v1/sessions` stores as `plannedArea`; its centre is the session centre
+- **Padding:** the area always reaches `AREA_PADDING_M` (250 m) past the furthest point anyone has been (live positions and every trail point)
+- **Grows:** when someone walks into the padding, the radius grows to `distance from centre + padding`. It never shrinks
+- **Each phone works it out itself** from the positions and trails it already has, so the server API doesn't change and nothing is shown. Phones that join late get the same result once `/trails` loads
+- Code: `apps/mobile/src/area/workingArea.ts` (`startingArea`, `growRadiusM`), stored as `areaRadiusM` in the area store
+
 ### Loading the map data (`/area`)
 
 The map is divided into cells about 1 km across. `@knockd/shared` has the helpers:
@@ -278,7 +288,7 @@ import { cellIdFor, cellsAround } from "@knockd/shared";
 const ids = cellsAround(myLocation); // cells within 500 m
 ```
 
-- On session start, load the cells covering the planned area (`session.plannedArea`) plus `cellsAround` each member
+- On session start, load the cells covering the working area (`cellsAround(centre, areaRadiusM)`, see "The session area") plus `cellsAround` each member. Load more each time the area grows
 - As anyone moves, check `cellsAround(theirPosition)` and fetch cells you don't have yet: `GET /v1/sessions/:id/area?cells=a,b,c` (up to 25 per request)
 - **Dedupe:** a street or block crossing a cell edge appears in both cells. Merge by `streetId` and `blockId`; houses never repeat
 - **Cache every cell on the phone.** Area data doesn't change during a day, and it's what makes the map work without signal
@@ -368,7 +378,7 @@ To see what it should look like, open [suggest-viewer.html](suggest-viewer.html)
 
 ### Offline map tiles
 
-The tiles are standard XYZ (`/tiles/{z}/{x}/{y}.mvt`), so MapLibre's offline manager can download a pack. Download the session area's bounds at zooms 12–16 on session start, while there's signal.
+The tiles are standard XYZ (`/tiles/{z}/{x}/{y}.mvt`), so MapLibre's offline manager can download a pack. Download the working area's bounds at zooms 12–16 on session start, while there's signal, and the new ring when the area grows.
 
 ---
 
