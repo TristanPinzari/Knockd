@@ -20,10 +20,10 @@ export const COLOURS = {
 
 const empty: FeatureCollection = { type: "FeatureCollection", features: [] };
 const SOURCES = ["blocks", "paths", "leads", "highlights", "notes"] as const;
-export type SourceId = (typeof SOURCES)[number];
+type SourceId = (typeof SOURCES)[number];
 
 /** Colours that change with the basemap: dark lines on the light map, light lines on the dark one. */
-export const themed = (theme: Theme) =>
+const themed = (theme: Theme) =>
   theme === "dark"
     ? { path: "#f3f2f8", ring: "#1b1a22", noteFill: "#1b1a22", noteStroke: "#f3f2f8", blockOpacity: 0.45 }
     : { path: COLOURS.path, ring: "#ffffff", noteFill: "#ffffff", noteStroke: COLOURS.note, blockOpacity: 0.38 };

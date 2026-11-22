@@ -2,7 +2,7 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { useCallback } from "react";
 import { config } from "./config";
 
-export class ApiError extends Error {
+class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
