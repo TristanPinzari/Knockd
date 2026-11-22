@@ -452,6 +452,10 @@ The basemap for MapLibre: OpenStreetMap data from Protomaps, cut to London (zoom
 <MapView mapStyle="https://api.knockd.rodeo/tiles/style.json" />
 ```
 
+### `GET /tiles/style-dark.json` 🔓
+
+The same basemap in Protomaps' dark flavour (the website's dark mode).
+
 ### `GET /tiles/{z}/{x}/{y}.mvt` 🔓
 
 Vector tiles (gzipped on the wire). `204` for empty tiles outside London. Standard XYZ, so it works in any MapLibre, including React Native **offline packs**: download the session area at zooms ~12–16 before heading out.
