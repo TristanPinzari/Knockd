@@ -53,6 +53,8 @@ export function TeamMap() {
   const [noteAt, setNoteAt] = useState<{ lat: number; lng: number } | null>(null);
   const [noteText, setNoteText] = useState("");
   const [saving, setSaving] = useState(false);
+  const [highlights, setHighlightList] = useState<GetHighlightsRes["highlights"]>([]);
+  const [notes, setNoteList] = useState<GetTeamNotesRes["notes"]>([]);
 
   // Time slider: null = now. `slider` moves instantly; `asOf` follows it after a short pause.
   const [slider, setSlider] = useState<number | null>(null);
@@ -148,10 +150,9 @@ export function TeamMap() {
     setLoadingLayers(true);
     const none: FeatureCollection = { type: "FeatureCollection", features: [] };
     try {
-      // Highlights and notes belong to the team; session data (blocks, streets, leads) to a map.
-      const [highlights, notes, paths, blocks, leads] = await Promise.all([
-        api<GetHighlightsRes>(`/v1/teams/${teamId}/highlights?bbox=${bbox}`),
-        api<GetTeamNotesRes>(`/v1/teams/${teamId}/notes?bbox=${bbox}`),
+      // Session data (blocks, streets, leads) for what's on screen. Highlights and notes are loaded
+      // separately, all at once (loadMarkings), so they stay put while the map moves.
+      const [paths, blocks, leads] = await Promise.all([
         current ? api<FeatureCollection>(`/v1/maps/${current.id}/paths?bbox=${bbox}${time}`) : none,
         current ? api<MapBlocksRes>(`/v1/maps/${current.id}/blocks?bbox=${bbox}${time}`) : { blocks: [] },
         current ? api<MapLeadsRes>(`/v1/maps/${current.id}/leads?bbox=${bbox}&grades=A,B${time}`) : { leads: [] },
@@ -160,14 +161,38 @@ export function TeamMap() {
       setBlocks(map, blocks.blocks);
       setPaths(map, paths, team.fadeDays, asOf ?? Date.now());
       setLeads(map, leads.leads);
-      setHighlights(map, highlights.highlights);
-      setNotes(map, notes.notes);
     } catch (e) {
       if (id === requestId.current) setError((e as Error).message);
     } finally {
       if (id === requestId.current) setLoadingLayers(false);
     }
-  }, [api, map, current, team, teamId, asOf]);
+  }, [api, map, current, team, asOf]);
+
+  // ---------- Highlights and notes: the whole team's, loaded once and always shown ----------
+  const loadMarkings = useCallback(async () => {
+    const world = "-180,-90,180,90"; // a team has a handful, so load them all
+    try {
+      const [h, n] = await Promise.all([
+        api<GetHighlightsRes>(`/v1/teams/${teamId}/highlights?bbox=${world}`),
+        api<GetTeamNotesRes>(`/v1/teams/${teamId}/notes?bbox=${world}`),
+      ]);
+      setHighlightList(h.highlights);
+      setNoteList(n.notes);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [api, teamId]);
+  useEffect(() => {
+    // After the first render (not synchronously in the effect), then again after adds and deletes.
+    const t = setTimeout(loadMarkings, 0);
+    return () => clearTimeout(t);
+  }, [loadMarkings]);
+  // Redraw them when they change, and after a basemap reload (which clears our layers).
+  useEffect(() => {
+    if (!map || !map.getSource("highlights")) return;
+    setHighlights(map, highlights);
+    setNotes(map, notes);
+  }, [map, styleKey, highlights, notes]);
 
   useEffect(() => {
     if (!map) return;
@@ -185,14 +210,14 @@ export function TeamMap() {
       setSaving(true);
       try {
         await api(path, { method: "POST", body: JSON.stringify(body) });
-        await loadLayers();
+        await loadMarkings();
       } catch (e) {
         setError((e as Error).message);
       } finally {
         setSaving(false);
       }
     },
-    [api, loadLayers],
+    [api, loadMarkings],
   );
   useDrawing(map, tool, colour, {
     onLine: (coordinates) =>
@@ -239,9 +264,9 @@ export function TeamMap() {
   }, [tool]);
 
   // Popups need the latest of these without re-binding every click handler.
-  const live = useRef({ tool, canEdit, api, loadLayers });
+  const live = useRef({ tool, canEdit, api, loadMarkings });
   useEffect(() => {
-    live.current = { tool, canEdit, api, loadLayers };
+    live.current = { tool, canEdit, api, loadMarkings };
   });
 
   // ---------- Popups ----------
@@ -276,7 +301,7 @@ export function TeamMap() {
           try {
             await live.current.api(`/v1/${kind}/${p.id}`, { method: "DELETE" });
             popup.remove();
-            await live.current.loadLayers();
+            await live.current.loadMarkings();
           } catch (err) {
             del.textContent = (err as Error).message;
           }

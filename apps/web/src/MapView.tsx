@@ -38,6 +38,7 @@ export function useMap(container: RefObject<HTMLDivElement | null>, options: { i
       attributionControl: { compact: true },
     });
     if (interactive) m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    const stopMiddlePan = interactive ? middleButtonPan(m) : () => {};
     m.on("style.load", () => setStyleKey((k) => k + 1));
     // A server without the dark style (not deployed yet): fall back to the light basemap, once
     // (the failed request can be reported more than once).
@@ -50,6 +51,7 @@ export function useMap(container: RefObject<HTMLDivElement | null>, options: { i
     });
     m.on("load", () => setMap(m));
     return () => {
+      stopMiddlePan();
       setMap(null);
       m.remove();
     };
@@ -63,6 +65,45 @@ export function useMap(container: RefObject<HTMLDivElement | null>, options: { i
   }, [map, theme]);
 
   return { map, styleKey, theme };
+}
+
+/**
+ * Hold the middle mouse button (press the scroll wheel) and drag to pan. Works even while a drawing
+ * tool is on, when a left-drag draws instead. Also stops the browser's middle-click autoscroll on
+ * the map. Returns a function that removes it.
+ */
+function middleButtonPan(map: maplibregl.Map): () => void {
+  const el = map.getCanvasContainer();
+  let last: { x: number; y: number } | null = null;
+
+  const down = (e: MouseEvent) => {
+    if (e.button !== 1) return;
+    e.preventDefault(); // no autoscroll
+    last = { x: e.clientX, y: e.clientY };
+    el.style.cursor = "grabbing";
+  };
+  const move = (e: MouseEvent) => {
+    if (!last) return;
+    map.panBy([last.x - e.clientX, last.y - e.clientY], { duration: 0 });
+    last = { x: e.clientX, y: e.clientY };
+  };
+  const up = (e: MouseEvent) => {
+    if (e.button !== 1 || !last) return;
+    last = null;
+    el.style.cursor = "";
+  };
+  const noAux = (e: MouseEvent) => e.button === 1 && e.preventDefault();
+
+  el.addEventListener("mousedown", down);
+  el.addEventListener("auxclick", noAux);
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+  return () => {
+    el.removeEventListener("mousedown", down);
+    el.removeEventListener("auxclick", noAux);
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+  };
 }
 
 /** A full-size map (e.g. behind the landing page). */
