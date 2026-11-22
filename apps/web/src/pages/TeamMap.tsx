@@ -597,7 +597,9 @@ export function TeamMap() {
         </div>
       )}
 
-      {showMembers && team && <MembersDialog teamId={teamId} myRole={role} onClose={() => setShowMembers(false)} />}
+      {showMembers && team && (
+        <MembersDialog teamId={teamId} teamName={team.name} myRole={role} onClose={() => setShowMembers(false)} />
+      )}
     </div>
   );
 }

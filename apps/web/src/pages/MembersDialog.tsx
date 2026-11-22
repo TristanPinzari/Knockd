@@ -4,8 +4,21 @@ import { useNavigate } from "react-router-dom";
 import { useApi } from "../api";
 import { Avatar, Modal, shortDate, Spinner } from "../ui";
 
-/** People on the team. The owner invites people, changes roles and removes people; anyone can leave. */
-export function MembersDialog({ teamId, myRole, onClose }: { teamId: string; myRole: TeamRole; onClose: () => void }) {
+/**
+ * People on the team. The owner invites people, changes roles, removes people and can delete the
+ * team; everyone else can leave.
+ */
+export function MembersDialog({
+  teamId,
+  teamName,
+  myRole,
+  onClose,
+}: {
+  teamId: string;
+  teamName: string;
+  myRole: TeamRole;
+  onClose: () => void;
+}) {
   const api = useApi();
   const navigate = useNavigate();
   const [members, setMembers] = useState<GetTeamMembersRes["members"] | null>(null);
@@ -117,6 +130,35 @@ export function MembersDialog({ teamId, myRole, onClose }: { teamId: string; myR
           </div>
         );
       })}
+
+      {owner && (
+        <div className="danger-zone">
+          <h3>Delete team</h3>
+          <p className="muted small">
+            Removes the team, its maps, highlights and notes for everyone. The sessions stay on any other teams they
+            were added to. This can't be undone.
+          </p>
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={async () => {
+              const typed = prompt(`To delete the team for everyone, type its name: ${teamName}`);
+              if (typed === null) return;
+              if (typed.trim() !== teamName.trim()) {
+                setError("The name didn't match, so the team wasn't deleted.");
+                return;
+              }
+              try {
+                await api(`/v1/teams/${teamId}`, { method: "DELETE" });
+                navigate("/", { replace: true });
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          >
+            Delete team
+          </button>
+        </div>
+      )}
 
       {!owner && myId && (
         <button

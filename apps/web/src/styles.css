@@ -205,6 +205,23 @@ a {
   padding: 0 14px;
   font-size: 14px;
 }
+.btn-danger {
+  background: transparent;
+  color: var(--bad);
+  box-shadow: 0 0 0 1px var(--bad) inset;
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.danger-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
 .btn-block {
   width: 100%;
 }
